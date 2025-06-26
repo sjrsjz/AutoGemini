@@ -1,0 +1,76 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "uv-sync",
+            "type": "shell",
+            "command": "uv",
+            "args": [
+                "sync"
+            ],
+            "group": "build",
+            "presentation": {
+                "echo": true,
+                "reveal": "silent",
+                "focus": false,
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "uv-run-interactive-test",
+            "type": "shell",
+            "command": "uv",
+            "args": [
+                "run",
+                "python",
+                "tests/run_interactive_test.py"
+            ],
+            "group": "test",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": true,
+                "panel": "new"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "uv-run-stream-test",
+            "type": "shell",
+            "command": "uv",
+            "args": [
+                "run",
+                "python",
+                "tests/test_stream_chat.py"
+            ],
+            "group": "test",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": true,
+                "panel": "new"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "uv-install",
+            "type": "shell",
+            "command": "uv",
+            "args": [
+                "pip",
+                "install",
+                "-e",
+                "."
+            ],
+            "group": "build",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        }
+    ]
+}
