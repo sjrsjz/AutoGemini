@@ -63,8 +63,10 @@ class AutoStreamProcessor:
         # 对话历史
         self.history: List[ChatMessage] = []
 
-        # ToolCode检测正则表达式
-        self.tool_code_pattern = re.compile(r"```tool_code\n(.*?)\n```", re.DOTALL)
+        # ToolCode检测正则表达式，兼容前面有空格或tab的情况
+        self.tool_code_pattern = re.compile(
+            r"^[ \t]*```tool_code\n(.*?)\n[ \t]*```", re.DOTALL | re.MULTILINE
+        )
 
         # 当前处理状态
         self.current_response = ""
@@ -164,14 +166,16 @@ class AutoStreamProcessor:
                             toolcode_content, self.default_api
                         )
                         result_text = self._format_execution_results(execution_results)
-                        fake_result = f"```result\n{result_text}\n```"
+                        fake_result = (
+                            f"```result(invisible to user)\n{result_text}\n```"
+                        )
                         self.history.append(
                             ChatMessage(MessageRole.ASSISTANT, fake_result)
                         )
                         if callback:
                             callback(result_text, CallbackMsgType.TOOLCODE_RESULT)
                     except Exception as e:
-                        fake_result = f"```error\n{str(e)}\n```"
+                        fake_result = f"```error(invisible to user)\n{str(e)}\n```"
                         self.history.append(
                             ChatMessage(MessageRole.ASSISTANT, fake_result)
                         )

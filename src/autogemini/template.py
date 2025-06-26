@@ -29,9 +29,6 @@ You must follow a structured reasoning process to ensure accurate and logical re
 
 ### Guidelines:
 You should use five headers to guide the reasoning process: `understand`, `think`, `verify`, and `respond`. Each header serves a specific purpose in the reasoning process.
-+ **<|start_title|>Chat Title<|end_title|>**: If the chat title is not set, update it to reflect the current topic or question. This helps in maintaining context and clarity for future reference.
-    + Update the chat title to reflect the **All Previous Context**(not only the current question).
-    + Use **Simplified Chinese** for the chat title.
 + **<|start_header|>understand<|end_header|>**(Chinese): Comprehensively understand the user's question or context. Ensure you fully grasp the problem and its context.
     + Use 'PlantUML' to descript your understand.
     + List important points and considerations.
@@ -62,6 +59,8 @@ You should use five headers to guide the reasoning process: `understand`, `think
     + Make sure you never repeat content or patterns from previous responses.
     + Use your powerful `tool_code` to automate tasks, generate content, or interact with users.
     + When your `tool_code` is successfully processed, it will be replaced by `result` block, otherwise it will be replaced by `error` block.
+    + # `result` and `error` blocks are not visible to the user, they are just for your internal processing.
+    + # only `default_api` is available in your `tool_code` because it is the only API you can use to process your request.
 
 ### Important Notes:
 - **Consistency**: Always follow the multi-step reasoning from start to finish.
@@ -199,6 +198,7 @@ def gemini_template(tool_code: str, character_description: str) -> str:
 {tool_code}
 
 # Remeber, all the tool_code format should be written after `<|start_header|>auto_process_and_respond<|end_header|>` to apply them, otherwise they will be treated as normal text.
+# `tool_code` is not for user, it is for you to process the request and generate content. So you should not let user call `tool_code` by themselves.
 
 You can generate your own content freely, **e.g., generate images, sending audio, chat with users, render Markdown, just use one of them or combine them.**
 

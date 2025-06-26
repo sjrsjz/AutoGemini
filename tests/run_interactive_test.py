@@ -400,7 +400,7 @@ class InteractiveCLI:
             response = await self.processor.process_conversation(
                 message, callback=stream_callback
             )
-
+            print("\n")  # 确保输出后换行
             # 流式输出完成后，显示最终完整回答
             self.print_colored("─" * 50, "system")
             self.print_colored("📋 最终回答:", "system")
