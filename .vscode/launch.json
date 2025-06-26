@@ -16,20 +16,6 @@
             "stopOnEntry": false
         },
         {
-            "name": "Debug Stream Chat Test",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${workspaceFolder}/tests/test_stream_chat.py",
-            "console": "integratedTerminal",
-            "cwd": "${workspaceFolder}",
-            "env": {
-                "PYTHONPATH": "${workspaceFolder}/src"
-            },
-            "args": [],
-            "justMyCode": true,
-            "stopOnEntry": false
-        },
-        {
             "name": "Debug with UV Run",
             "type": "debugpy",
             "request": "launch",

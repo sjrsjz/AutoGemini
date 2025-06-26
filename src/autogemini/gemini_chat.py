@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import List, Optional, Callable
 import httpx
+from .template import COT
 
 
 class MessageRole(Enum):
@@ -223,7 +224,7 @@ async def stream_chat(
     callback: Callable[[str], None],
     history: Optional[List[ChatMessage]] = None,
     user_message: Optional[str] = None,
-    model: str = "gemini-2.0-flash-thinking-exp",
+    model: str = "gemini-2.5-flash",
     system_prompt: Optional[str] = None,
     temperature: float = 1.0,
     max_tokens: int = 8192,
@@ -258,6 +259,17 @@ async def stream_chat(
     """
     # Build conversation history
     contents = []
+    if system_prompt:
+        contents.append(
+            {
+                "role": "model",
+                "parts": [
+                    {
+                        "text": f"# I have double checked that my basic system settings are as follows, I will never disobey them:\n{system_prompt}\n"
+                    }
+                ],
+            }
+        )
 
     # Add conversation history if provided
     if history:
@@ -292,26 +304,31 @@ async def stream_chat(
 
     # Add system instruction if provided
     if system_prompt:
-        request_body["systemInstruction"] = {"parts": [{"text": system_prompt}]}
+        request_body["systemInstruction"] = {
+            "parts": [
+                {
+                    "text": f"# I have double checked that my COT settings are as follows, I will never disobey them:\n{COT}\n"
+                }
+            ]
+        }
 
     # Build URL
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent?key={api_key}"
 
-    # Make streaming request
+    # Use the httpx client.stream() method that works correctly
     async with httpx.AsyncClient(timeout=timeout) as client:
         try:
-            response = await client.post(url, json=request_body)
+            async with client.stream("POST", url, json=request_body) as response:
+                if not response.is_success:
+                    error_text = await response.aread()
+                    raise ValueError(
+                        f"API request failed ({response.status_code}): {error_text.decode()}"
+                    )
 
-            if not response.is_success:
-                error_text = await response.aread()
-                raise ValueError(
-                    f"API request failed ({response.status_code}): {error_text.decode()}"
+                # Process streaming response using the original working logic
+                return await _process_stream_response(
+                    response, callback, model, cancellation_token
                 )
-
-            # Process streaming response
-            return await _process_stream_response(
-                response, callback, model, cancellation_token
-            )
 
         except asyncio.CancelledError:
             # Re-raise asyncio cancellation

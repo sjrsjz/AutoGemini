@@ -67,6 +67,8 @@ class PythonEvalTool:
                 "set": set,
                 # 数学函数
                 "pow": pow,
+                # 输出函数
+                "print": print,
                 # 自定义安全的__import__函数
                 "__import__": self._safe_import,
             },
@@ -92,12 +94,31 @@ class PythonEvalTool:
             if not code:
                 return "空代码"
 
+            # 使用io.StringIO捕获print输出
+            import io
+            import sys
+
+            # 保存原始stdout
+            old_stdout = sys.stdout
+            captured_output = io.StringIO()
+
             try:
-                result = eval(code, self.safe_globals, self.local_vars)
-                return str(result)
-            except SyntaxError:
+                # 重定向stdout到我们的缓冲区
+                sys.stdout = captured_output
+
+                # 直接使用exec执行代码
                 exec(code, self.safe_globals, self.local_vars)
-                return "执行成功"
+
+                # 获取捕获的输出
+                output = captured_output.getvalue()
+
+                # 如果有输出内容，返回输出；否则返回执行成功
+                return output.strip() if output.strip() else "执行成功"
+
+            finally:
+                # 恢复原始stdout
+                sys.stdout = old_stdout
+                captured_output.close()
 
         except ZeroDivisionError:
             return "错误：除零"
@@ -164,11 +185,7 @@ class InteractiveCLI:
                 self.config = json.load(f)
 
             # 验证必要的配置项
-            if (
-                not self.config
-                or not self.config.get("api_key")
-                or self.config["api_key"] == "your_gemini_api_key_here"
-            ):
+            if not self.config or not self.config.get("api_key"):
                 self.print_colored("❌ 请在keys.json中设置有效的API密钥", "error")
                 return False
 
@@ -216,8 +233,10 @@ class InteractiveCLI:
             ToolCodeInfo(
                 name="python_eval",
                 description="执行Python代码并返回结果",
-                detail="支持基础数学运算、变量赋值等操作",
-                args={"code": "要执行的Python代码字符串"},
+                detail="支持基础数学运算、变量赋值等操作。你将会获得代码执行完成后stdout的内容",
+                args={
+                    "code": "要执行的Python代码字符串，为了获取结果，请使用print()函数"
+                },
             ),
             ToolCodeInfo(
                 name="python_reset",
@@ -255,7 +274,7 @@ class InteractiveCLI:
                 "character_description",
                 "你是一个智能助手，能够执行Python代码并提供准确的回答。",
             ),
-            model=self.config.get("model", "gemini-2.0-flash-thinking-exp"),
+            model=self.config.get("model", "gemini-2.5-flash"),
             temperature=self.config.get("temperature", 1.0),
             max_tokens=self.config.get("max_tokens", 8192),
             top_p=self.config.get("top_p", 0.95),
@@ -265,7 +284,12 @@ class InteractiveCLI:
 
     def print_colored(self, text: str, color: str = "system"):
         """打印彩色文本"""
-        print(f"{self.colors.get(color, '')}{text}{Style.RESET_ALL}")
+        print(f"{self.colors.get(color, '')}{text}{Style.RESET_ALL}", flush=True)
+
+    def force_print(self, text: str, color: str = "system", end: str = ""):
+        """强制输出文本，确保立即显示"""
+        colored_text = f"{self.colors.get(color, '')}{text}{Style.RESET_ALL}"
+        print(colored_text, end=end, flush=True)
 
     def print_banner(self):
         """打印欢迎横幅"""
@@ -356,32 +380,33 @@ class InteractiveCLI:
             self.print_colored("❌ 处理器未初始化", "error")
             return
 
-        def stream_callback(chunk: str):
-            # 检查是否是ToolCode执行通知
-            if "[执行ToolCode...]" in chunk:
-                print(
-                    f"{self.colors['toolcode']}{chunk}{Style.RESET_ALL}",
-                    end="",
-                    flush=True,
-                )
-            elif chunk.startswith("\n[") and chunk.endswith("]\n"):
-                # 系统通知
-                print(
-                    f"{self.colors['system']}{chunk}{Style.RESET_ALL}",
-                    end="",
-                    flush=True,
-                )
+        from autogemini.auto import CallbackMsgType
+
+        def stream_callback(chunk: str, msg_type: CallbackMsgType):
+            if msg_type == CallbackMsgType.STREAM:
+                self.force_print(chunk, "ai")
+            elif msg_type == CallbackMsgType.TOOLCODE_START:
+                self.force_print(f"\n[ToolCode开始执行...]\n{chunk}\n", "toolcode")
+            elif msg_type == CallbackMsgType.TOOLCODE_RESULT:
+                self.force_print(f"\n[ToolCode执行结果]\n{chunk}\n", "toolcode")
+            elif msg_type == CallbackMsgType.ERROR:
+                self.force_print(f"\n[错误]\n{chunk}\n", "error")
+            elif msg_type == CallbackMsgType.INFO:
+                self.force_print(chunk, "system")
             else:
-                # 正常AI回答
-                print(
-                    f"{self.colors['ai']}{chunk}{Style.RESET_ALL}", end="", flush=True
-                )
+                self.force_print(chunk, "system")
 
         try:
             response = await self.processor.process_conversation(
                 message, callback=stream_callback
             )
-            print()  # 换行
+
+            # 流式输出完成后，显示最终完整回答
+            self.print_colored("─" * 50, "system")
+            self.print_colored("📋 最终回答:", "system")
+            self.print_colored(response, "ai")
+            self.print_colored("─" * 50, "system")
+
         except Exception as e:
             self.print_colored(f"\n❌ 处理失败: {e}", "error")
 
