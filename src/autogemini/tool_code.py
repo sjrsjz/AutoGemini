@@ -11,6 +11,7 @@ class DefaultApi:
 
     def __getattr__(self, name: str) -> Any:
         """Handle API method calls for unknown attributes."""
+
         def method(*args, **kwargs):
             """Handle API method calls."""
             if name in self._handlers:
@@ -271,12 +272,14 @@ def process_streaming_response(
 
     return final_output
 
+
 # 使用示例和辅助函数
+
 
 def create_streaming_handler(default_api: DefaultApi):
     """
     创建一个流式处理句柄，用于实际的LLM API集成
-    
+
     使用示例:
     ```python
     # 设置API处理器
@@ -286,16 +289,16 @@ def create_streaming_handler(default_api: DefaultApi):
         elif method_name == "calculate":
             return eval(args[0])  # 简单计算
         return f"Unknown method: {method_name}"
-    
+
     api = DefaultApi(my_api_handler)
     handler = create_streaming_handler(api)
-    
+
     # 模拟流式输出处理
     stream_chunks = [
         "根据您的需求，我来查询天气信息：\n\n```tool_code\nprint(default_api.get_weather('北京'))\n```",
         "\n\n基于查询结果，今天是个好天气！"
     ]
-    
+
     for chunk in stream_chunks:
         result, should_interrupt = handler.process_stream_chunk(chunk)
         if should_interrupt:
@@ -310,19 +313,19 @@ def create_streaming_handler(default_api: DefaultApi):
 def extract_and_execute_all_tool_codes(text: str, default_api: DefaultApi) -> str:
     """
     一次性提取并执行文本中的所有tool_code块
-    
+
     Args:
         text: 包含tool_code的文本
         default_api: API处理器
-        
+
     Returns:
         替换所有tool_code后的文本
     """
     processor = ToolCodeProcessor(default_api)
-    
+
     # 模拟流式处理，但一次性处理完整文本
     result, _ = processor.process_stream_chunk(text)
-    
+
     # 继续处理直到没有更多tool_code
     while True:
         processor.reset_buffer()
@@ -330,5 +333,5 @@ def extract_and_execute_all_tool_codes(text: str, default_api: DefaultApi) -> st
         if not has_tool_code:
             break
         result = new_result
-    
+
     return result

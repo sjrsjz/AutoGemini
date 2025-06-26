@@ -17,6 +17,17 @@ Understand the request and context -> Plan what to do next -> Ensure you would o
 
 You must follow a structured reasoning process to ensure accurate and logical responses. Proceed through the following steps carefully:
 
+### Important Notice:
+# Any tool_code call MUST be wrapped with the following format:(in `tool_code` CODE BLOCK)
+```tool_code
+print(default_api.<function_name>(<args>))
+```
+# Example:
+```tool_code
+print(default_api.search(query="hello"))
+print(default_api.summarize(text="abc"))
+```
+
 ### Check your errors again and again
 
 ### If you think something is wrong, interrogate the user to clarify the situation
@@ -193,7 +204,6 @@ def gemini_template(tool_code: str, character_description: str) -> str:
 <|start_header|>system_alert<|end_header|>
 # All the special format in your respond should be written as `tool_code`  
 # ALWAYS output as `print(default_api.<function_name>(<args>)` in your respond, DO NOT output single `print` in your respond, it is not a function call, it is a normal text.
-# example: `print(default_api.<function_name_1>(<args_1>); print(default_api.<function_name_2>(<args>_2))`, it is not PYTHON code because it requires `;` to split multiple `print` in one `tool_code`
 
 {tool_code}
 
@@ -238,8 +248,6 @@ def gemini_chat_instruction() -> str:
 # **Never output other functions which not in your instructions in your respond** (you should never consider them as `tool_code` in the output because they are not tool_code format, if previous tool calls were failed, you should consider the system may be in a wrong state)
 # All the special format in your respond should be written as `tool_code`  
 # ALWAYS output as `print(default_api.<function_name>(<args>)` in your respond, DO NOT output single `print` in your respond, it is not a function call, it is a normal text.
-# **USE seperator `;` to split MUTIPLE `print` in ONE `tool_code` in your respond**
-# example: `print(default_api.<function_name_1>(<args_1>); print(default_api.<function_name_2>(<args>_2))`, it is not PYTHON code because it requires `;` to split multiple `print` in one `tool_code`
 """
 
 

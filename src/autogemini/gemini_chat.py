@@ -259,6 +259,12 @@ async def stream_chat(
     """
     # Build conversation history
     contents = []
+
+    # Add conversation history if provided
+    if history:
+        for message in history:
+            role = "user" if message.role == MessageRole.USER else "model"
+            contents.append({"role": role, "parts": [{"text": message.content}]})
     if system_prompt:
         contents.append(
             {
@@ -270,13 +276,6 @@ async def stream_chat(
                 ],
             }
         )
-
-    # Add conversation history if provided
-    if history:
-        for message in history:
-            role = "user" if message.role == MessageRole.USER else "model"
-            contents.append({"role": role, "parts": [{"text": message.content}]})
-
     # Add current user message only if provided
     if user_message:
         contents.append({"role": "user", "parts": [{"text": user_message}]})

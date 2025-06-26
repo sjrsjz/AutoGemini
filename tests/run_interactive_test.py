@@ -25,128 +25,87 @@ from autogemini.template import ToolCodeInfo
 colorama.init(autoreset=True)
 
 
-class PythonEvalTool:
-    """简易的Python eval工具，提供安全的代码执行环境"""
+import websockets
+import base64
 
-    def __init__(self):
-        # 定义允许导入的安全模块白名单
-        self.safe_modules = {
-            "math",  # 数学计算模块
-            "random",  # 随机数生成模块
-            "datetime",  # 日期时间模块
-            "json",  # JSON处理模块
-            "re",  # 正则表达式模块
-            "statistics",  # 统计模块
-            "decimal",  # 精确十进制计算
-            "fractions",  # 分数计算
-        }
 
-        # 预定义的安全执行环境
-        self.safe_globals = {
-            "__builtins__": {
-                # 数学函数
-                "abs": abs,
-                "round": round,
-                "min": min,
-                "max": max,
-                "sum": sum,
-                "len": len,
-                "range": range,
-                "enumerate": enumerate,
-                "zip": zip,
-                "map": map,
-                "filter": filter,
-                # 类型转换
-                "int": int,
-                "float": float,
-                "str": str,
-                "bool": bool,
-                "list": list,
-                "dict": dict,
-                "tuple": tuple,
-                "set": set,
-                # 数学函数
-                "pow": pow,
-                # 输出函数
-                "print": print,
-                # 自定义安全的__import__函数
-                "__import__": self._safe_import,
-            },
-        }
-        self.local_vars = {}
+# WolframAlpha工具
+class WolframAlphaTool:
+    """WolframAlpha 查询工具"""
 
-    def _safe_import(self, name, globals=None, locals=None, fromlist=(), level=0):
-        """安全的模块导入函数，只允许导入白名单中的模块"""
-        if name in self.safe_modules:
-            # 使用真实的__import__函数导入允许的模块
-            import builtins
+    def __init__(self, log_func):
+        self.log_func = log_func
 
-            return builtins.__import__(name, globals, locals, fromlist, level)
-        else:
-            raise ImportError(
-                f"出于安全考虑，模块 '{name}' 不允许导入。允许的模块: {', '.join(sorted(self.safe_modules))}"
-            )
-
-    def execute(self, code: str) -> str:
-        """执行Python代码并返回结果"""
-        try:
-            code = code.strip()
-            if not code:
-                return "空代码"
-
-            # 使用io.StringIO捕获print输出
-            import io
-            import sys
-
-            # 保存原始stdout
-            old_stdout = sys.stdout
-            captured_output = io.StringIO()
-
-            try:
-                # 重定向stdout到我们的缓冲区
-                sys.stdout = captured_output
-
-                # 直接使用exec执行代码
-                exec(code, self.safe_globals, self.local_vars)
-
-                # 获取捕获的输出
-                output = captured_output.getvalue()
-
-                # 如果有输出内容，返回输出；否则返回执行成功
-                return output.strip() if output.strip() else "执行成功"
-
-            finally:
-                # 恢复原始stdout
-                sys.stdout = old_stdout
-                captured_output.close()
-
-        except ZeroDivisionError:
-            return "错误：除零"
-        except NameError as e:
-            return f"错误：未定义的变量或函数 - {str(e)}"
-        except ValueError as e:
-            return f"错误：值错误 - {str(e)}"
-        except TypeError as e:
-            return f"错误：类型错误 - {str(e)}"
-        except Exception as e:
-            return f"错误：{type(e).__name__} - {str(e)}"
-
-    def reset_vars(self):
-        """重置所有变量"""
-        self.local_vars.clear()
-        return "变量已重置"
-
-    def get_vars(self) -> str:
-        """获取当前所有变量"""
-        if not self.local_vars:
-            return "无变量"
-
-        vars_list = []
-        for key, value in self.local_vars.items():
-            if not key.startswith("_"):
-                vars_list.append(f"{key} = {value}")
-
-        return "\n".join(vars_list) if vars_list else "无用户定义变量"
+    async def compute(self, query, image_only=False):
+        q = [{"t": 0, "v": query}]
+        results = []
+        async with websockets.connect(
+            "wss://gateway.wolframalpha.com/gateway"
+        ) as websocket:
+            msg = {
+                "category": "results",
+                "type": "init",
+                "lang": "en",
+                "wa_pro_s": "",
+                "wa_pro_t": "",
+                "wa_pro_u": "",
+                "exp": 1714399254570,
+                "displayDebuggingInfo": False,
+                "messages": [],
+            }
+            await websocket.send(json.dumps(msg))
+            response = json.loads(await websocket.recv())
+            if "type" in response and response["type"] != "ready":
+                self.log_func("ERROR", "WolframAlpha", "Error:", response)
+                return None
+            self.log_func("INFO", "WolframAlpha", "Response:", response)
+            msg = {
+                "type": "newQuery",
+                "locationId": "oi8ft_en_light",
+                "language": "en",
+                "displayDebuggingInfo": False,
+                "yellowIsError": False,
+                "requestSidebarAd": False,
+                "category": "results",
+                "input": base64.b64encode(json.dumps(q).encode()).decode(),
+                "i2d": True,
+                "assumption": [],
+                "apiParams": {},
+                "file": None,
+                "theme": "light",
+            }
+            self.log_func("INFO", "WolframAlpha", "Sending Query:", msg)
+            await websocket.send(json.dumps(msg))
+            while True:
+                response = await websocket.recv()
+                json_ = json.loads(response)
+                if "type" in json_ and json_["type"] == "queryComplete":
+                    break
+                if "pods" not in json_:
+                    if "relatedQueries" in json_:
+                        results.append([{"relatedQueries": json_["relatedQueries"]}])
+                    continue
+                for pods in json_["pods"]:
+                    if "subpods" not in pods:
+                        continue
+                    data = {}
+                    data.update({"title": pods["title"]})
+                    for subpods in pods["subpods"]:
+                        if not image_only:
+                            data.update({"plaintext": subpods["plaintext"]})
+                        if "minput" in subpods and not image_only:
+                            data.update({"minput": subpods["minput"]})
+                        if "moutput" in subpods and not image_only:
+                            data.update({"moutput": subpods["moutput"]})
+                        if "img" in subpods and "data" in subpods["img"]:
+                            data.update({"img_base64": subpods["img"]["data"]})
+                        if "img" in subpods and "contenttype" in subpods["img"]:
+                            data.update(
+                                {"img_contenttype": subpods["img"]["contenttype"]}
+                            )
+                    results.append(data)
+        self.log_func("INFO", "WolframAlpha", "Results:", results)
+        return results
 
 
 class InteractiveCLI:
@@ -155,7 +114,7 @@ class InteractiveCLI:
     def __init__(self):
         self.config: Optional[Dict[str, Any]] = None
         self.processor = None
-        self.python_tool = PythonEvalTool()
+        self.wolfram_tool = WolframAlphaTool(self.log_func)
         self.running = True
 
         # 颜色配置
@@ -167,6 +126,11 @@ class InteractiveCLI:
             "toolcode": Fore.BLUE,
             "command": Fore.MAGENTA,
         }
+
+    def log_func(self, level, module, *args):
+        # 简单日志输出
+        msg = " ".join(str(a) for a in args)
+        print(f"[{level}] [{module}] {msg}")
 
     def load_config(self) -> bool:
         """加载配置文件"""
@@ -198,57 +162,72 @@ class InteractiveCLI:
             return False
 
     def create_api_handler(self) -> DefaultApi:
-        """创建API处理器"""
+        """创建API处理器，兼容事件循环已运行的环境（不使用nest_asyncio）"""
+        import asyncio
+        import concurrent.futures
 
         def api_handler(method_name: str, *args, **kwargs) -> str:
-            if method_name == "python_eval":
-                # 支持位置参数和关键字参数
-                code = None
+            if method_name == "wolfram_query":
+                query = None
                 if args:
-                    code = str(args[0])
-                elif "code" in kwargs:
-                    code = str(kwargs["code"])
-
-                if code:
-                    return self.python_tool.execute(code)
-                return "错误：缺少代码参数"
-            elif method_name == "python_reset":
-                return self.python_tool.reset_vars()
-            elif method_name == "python_vars":
-                return self.python_tool.get_vars()
+                    query = str(args[0])
+                elif "query" in kwargs:
+                    query = str(kwargs["query"])
+                if not query:
+                    return "错误：缺少查询参数"
+                # 运行异步查询，兼容事件循环已运行的环境
+                try:
+                    try:
+                        loop = asyncio.get_running_loop()
+                        # 如果能获取到running loop，说明事件循环已运行
+                        # 必须用线程池调度，否则不能阻塞主loop
+                        with concurrent.futures.ThreadPoolExecutor() as pool:
+                            future = pool.submit(lambda: asyncio.run(self.wolfram_tool.compute(query)))
+                            results = future.result()
+                    except RuntimeError:
+                        # 没有事件循环在运行
+                        results = asyncio.run(self.wolfram_tool.compute(query))
+                except Exception as e:
+                    return f"WolframAlpha 查询失败: {e}"
+                if not results:
+                    return "无结果"
+                # 简单格式化
+                return self.format_results(results)
             elif method_name == "help":
-                return """可用工具:
-- python_eval(code): 执行Python代码
-- python_reset(): 重置变量环境  
-- python_vars(): 查看当前变量
-- help(): 显示帮助信息"""
+                return """可用工具:\n- wolfram_query(query): 查询WolframAlpha知识引擎\n- help(): 显示帮助信息"""
             else:
                 return f"未知方法: {method_name}"
 
         return DefaultApi(api_handler)
 
+    def format_results(self, results):
+        # 只做简单文本格式化
+        out = []
+        for result in results:
+            if isinstance(result, list):
+                # relatedQueries
+                for r in result:
+                    if "relatedQueries" in r:
+                        out.append("相关查询: " + ", ".join(r["relatedQueries"]))
+                continue
+            if "title" in result:
+                out.append(f"[{result['title']}]\n")
+            if "plaintext" in result:
+                out.append(result["plaintext"])
+            if "minput" in result:
+                out.append(f"Mathematica Input: {result['minput']}")
+            if "moutput" in result:
+                out.append(f"Mathematica Output: {result['moutput']}")
+        return "\n".join(out) if out else "无结果"
+
     def create_tool_codes(self) -> list:
         """创建工具代码信息"""
         return [
             ToolCodeInfo(
-                name="python_eval",
-                description="执行Python代码并返回结果",
-                detail="支持基础数学运算、变量赋值等操作。你将会获得代码执行完成后stdout的内容",
-                args={
-                    "code": "要执行的Python代码字符串，为了获取结果，请使用print()函数"
-                },
-            ),
-            ToolCodeInfo(
-                name="python_reset",
-                description="重置Python执行环境",
-                detail="清空所有用户定义的变量",
-                args={},
-            ),
-            ToolCodeInfo(
-                name="python_vars",
-                description="查看当前Python环境中的变量",
-                detail="显示所有用户定义的变量及其值",
-                args={},
+                name="wolfram_query",
+                description="查询WolframAlpha知识引擎",
+                detail="输入自然语言或数学表达式，返回WolframAlpha的结果。",
+                args={"query": "要查询的内容（自然语言或数学表达式）"},
             ),
             ToolCodeInfo(
                 name="help",
@@ -296,14 +275,14 @@ class InteractiveCLI:
         banner = f"""
 {Fore.CYAN}╔══════════════════════════════════════════════════════════════╗
 ║                    🤖 AutoGemini CLI                         ║
-║              智能对话 + Python代码执行                       ║
+║              智能对话 + WolframAlpha知识引擎                 ║
 ╚══════════════════════════════════════════════════════════════╝{Style.RESET_ALL}
 
 {Fore.YELLOW}💡 使用提示:{Style.RESET_ALL}
   • 直接输入问题开始对话
   • 输入 {Fore.MAGENTA}/help{Style.RESET_ALL} 查看所有命令
   • 输入 {Fore.MAGENTA}/quit{Style.RESET_ALL} 或 {Fore.MAGENTA}/exit{Style.RESET_ALL} 退出程序
-  • AI可以执行Python代码进行计算和分析
+  • AI可调用WolframAlpha进行知识、计算、科学、数学等查询
 
 {Fore.GREEN}🚀 准备就绪！开始对话吧...{Style.RESET_ALL}
 """
@@ -316,20 +295,21 @@ class InteractiveCLI:
   {Fore.CYAN}/help{Style.RESET_ALL}        - 显示此帮助信息
   {Fore.CYAN}/quit, /exit{Style.RESET_ALL} - 退出程序
   {Fore.CYAN}/clear{Style.RESET_ALL}       - 清空对话历史
-  {Fore.CYAN}/reset{Style.RESET_ALL}       - 重置Python执行环境
-  {Fore.CYAN}/vars{Style.RESET_ALL}        - 查看当前Python变量
+  {Fore.CYAN}/reset{Style.RESET_ALL}       - WolframAlpha工具无需重置
+  {Fore.CYAN}/vars{Style.RESET_ALL}        - WolframAlpha工具无变量环境
   {Fore.CYAN}/config{Style.RESET_ALL}      - 显示当前配置
 
-{Fore.YELLOW}💻 Python功能:{Style.RESET_ALL}
-  • 支持基础数学运算: 1+1, (2+3)*4
-  • 支持变量操作: x=10, y=x*2
-  • 支持数学函数: math.sin(math.pi/2)
-  • 自动执行AI生成的Python代码
+{Fore.YELLOW}� WolframAlpha功能:{Style.RESET_ALL}
+  • 支持自然语言、数学表达式、科学、工程、统计等领域的知识查询
+  • 例如："积分 x^2 dx", "太阳到地球的距离", "2024年中国GDP", "sin(30度)是多少"
+  • AI会自动调用WolframAlpha获取权威答案
 
 {Fore.GREEN}💬 对话示例:{Style.RESET_ALL}
   "计算1到100的和"
-  "定义一个变量x=5，然后计算x的平方"
-  "帮我分析这个数据集的统计信息"
+  "太阳的质量是多少"
+  "微积分公式"
+  "中国人口"
+  "sin(45度)"
 """
         print(help_text)
 
@@ -351,13 +331,11 @@ class InteractiveCLI:
             else:
                 self.print_colored("❌ 处理器未初始化", "error")
 
+        # /reset 和 /vars 命令已无意义，直接提示
         elif command == "/reset":
-            result = self.python_tool.reset_vars()
-            self.print_colored(f"🔄 {result}", "system")
-
+            self.print_colored("🔄 WolframAlpha工具无需重置", "system")
         elif command == "/vars":
-            vars_info = self.python_tool.get_vars()
-            self.print_colored(f"📊 当前变量:\n{vars_info}", "system")
+            self.print_colored("📊 WolframAlpha工具无变量环境", "system")
 
         elif command == "/config":
             if self.config:

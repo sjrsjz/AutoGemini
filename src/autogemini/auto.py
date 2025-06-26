@@ -169,16 +169,12 @@ class AutoStreamProcessor:
                         fake_result = (
                             f"```result(invisible to user)\n{result_text}\n```"
                         )
-                        self.history.append(
-                            ChatMessage(MessageRole.ASSISTANT, fake_result)
-                        )
+                        self.history.append(ChatMessage(MessageRole.USER, fake_result))
                         if callback:
                             callback(result_text, CallbackMsgType.TOOLCODE_RESULT)
                     except Exception as e:
                         fake_result = f"```error(invisible to user)\n{str(e)}\n```"
-                        self.history.append(
-                            ChatMessage(MessageRole.ASSISTANT, fake_result)
-                        )
+                        self.history.append(ChatMessage(MessageRole.USER, fake_result))
                         if callback:
                             callback(str(e), CallbackMsgType.ERROR)
                     # 继续循环
