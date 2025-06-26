@@ -8,3 +8,9 @@ wheels/
 
 # Virtual environments
 .venv
+
+# API Keys and sensitive configuration
+tests/keys.json
+keys.json
+*.key
+*.secret

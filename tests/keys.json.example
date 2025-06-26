@@ -1,0 +1,10 @@
+{
+  "api_key": "your_gemini_api_key_here",
+  "model": "gemini-2.0-flash-thinking-exp",
+  "temperature": 1.0,
+  "max_tokens": 8192,
+  "top_p": 0.95,
+  "top_k": 40,
+  "timeout": 300.0,
+  "character_description": "你是一个智能助手，能够执行Python代码并提供准确的回答。支持数学计算、变量操作等功能。"
+}
