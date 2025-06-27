@@ -93,7 +93,12 @@ class AutoStreamProcessor:
             self.history.clear()
 
         # 只在开始时添加用户消息到历史
-        self.history.append(ChatMessage(MessageRole.USER, user_message))
+        self.history.append(
+            ChatMessage(
+                MessageRole.USER,
+                f"<|start_header|>user_message<|end_header|>{user_message}",
+            )
+        )
 
         # 重置处理状态
         self.current_response = ""
@@ -149,15 +154,15 @@ class AutoStreamProcessor:
                     toolcode_content, start_pos, end_pos = toolcode_match
                     before_toolcode = ai_output[:start_pos]
 
-                    self.history.append(
-                        ChatMessage(
-                            MessageRole.ASSISTANT,
-                            before_toolcode
-                            + "```tool_code\n"
-                            + toolcode_content
-                            + "\n```",
-                        )
-                    )
+                    # self.history.append(
+                    #     ChatMessage(
+                    #         MessageRole.ASSISTANT,
+                    #         before_toolcode
+                    #         + "```tool_code\n"
+                    #         + toolcode_content
+                    #         + "\n```",
+                    #     )
+                    # )
                     final_response += before_toolcode
                     try:
                         if callback:
@@ -166,15 +171,43 @@ class AutoStreamProcessor:
                             toolcode_content, self.default_api
                         )
                         result_text = self._format_execution_results(execution_results)
-                        fake_result = (
-                            f"```result(invisible to user)\n{result_text}\n```"
+                        fake_result = f"<|start_header|>system_tool_code_result<|end_header|>\n{result_text}\n"
+                        self.history.append(
+                            ChatMessage(
+                                MessageRole.ASSISTANT,
+                                before_toolcode
+                                + "```tool_code\n"
+                                + toolcode_content
+                                + "\n```"
+                                + fake_result,
+                            )
                         )
-                        self.history.append(ChatMessage(MessageRole.USER, fake_result))
+                        self.history.append(
+                            ChatMessage(
+                                MessageRole.USER,
+                                f"<|start_header|>system_alert<|end_header|>continue auto processing by using `<|start_header|>call_tool_code<|end_header|>`",
+                            )
+                        )
                         if callback:
                             callback(result_text, CallbackMsgType.TOOLCODE_RESULT)
                     except Exception as e:
-                        fake_result = f"```error(invisible to user)\n{str(e)}\n```"
-                        self.history.append(ChatMessage(MessageRole.USER, fake_result))
+                        fake_result = f"<|start_header|>system_tool_code_result<|end_header|>\n{str(e)}\n"
+                        self.history.append(
+                            ChatMessage(
+                                MessageRole.ASSISTANT,
+                                before_toolcode
+                                + "```tool_code\n"
+                                + toolcode_content
+                                + "\n```"
+                                + fake_result,
+                            )
+                        )
+                        self.history.append(
+                            ChatMessage(
+                                MessageRole.USER,
+                                f"<|start_header|>system_alert<|end_header|>continue auto processing by using `<|start_header|>call_tool_code<|end_header|>`",
+                            )
+                        )
                         if callback:
                             callback(str(e), CallbackMsgType.ERROR)
                     # 继续循环
