@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "autogemini"
-version = "0.1.0"
+version = "0.1.0-1"
 description = "AutoGemini - 流式Gemini API处理系统"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -12,7 +12,8 @@ dependencies = [
     "aiohttp>=3.12.13",
     "httpx>=0.25.0",
     "requests>=2.32.4",
-    "websockets>=15.0.1",
+    # 兼容 pyppeteer、google-genai、autogemini 三者
+    "websockets>=10.0,<11.0",
 ]
 authors = [
     {name = "Your Name", email = "your.email@example.com"}
