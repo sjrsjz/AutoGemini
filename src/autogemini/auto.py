@@ -124,8 +124,11 @@ class AutoStreamProcessor:
             callback(chunk: str, msg_type: CallbackMsgType)
         """
         final_response = ""
+        max_cycle_cost = 3  # 最大循环次数，防止无限循环
+        cost = 0
         while not self.processing_complete:
             stream_buffer = ""
+            cost += 1
 
             def stream_callback(chunk: str):
                 nonlocal stream_buffer
@@ -171,7 +174,7 @@ class AutoStreamProcessor:
                             toolcode_content, self.default_api
                         )
                         result_text = self._format_execution_results(execution_results)
-                        fake_result = f"<|start_header|>system_tool_code_result<|end_header|>\n{result_text}\n"
+                        fake_result = f"<|start_header|>system_tool_code_result<|end_header|>\n{result_text}\n<|start_header|>system_cycle_cost<|end_header|>current cost: {cost}\nmax cost: {max_cycle_cost}\n"
                         self.history.append(
                             ChatMessage(
                                 MessageRole.ASSISTANT,
@@ -191,7 +194,7 @@ class AutoStreamProcessor:
                         if callback:
                             callback(result_text, CallbackMsgType.TOOLCODE_RESULT)
                     except Exception as e:
-                        fake_result = f"<|start_header|>system_tool_code_result<|end_header|>\n{str(e)}\n"
+                        fake_result = f"<|start_header|>system_tool_code_result<|end_header|>\n{str(e)}\n<|start_header|>system_cycle_cost<|end_header|>current cost: {cost}\nmax cost: {max_cycle_cost}\n"
                         self.history.append(
                             ChatMessage(
                                 MessageRole.ASSISTANT,
