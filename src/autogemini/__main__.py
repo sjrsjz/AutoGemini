@@ -1,4 +1,4 @@
-"""Command line interface for universemcp."""
+"""Command line interface for AutoGemini."""
 
 from .main import main
 

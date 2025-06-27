@@ -88,28 +88,25 @@ async def _process_stream_response(
     full_response = ""
     has_received_data = False
 
-    # Character-level parsing variables
+    # Rust风格的字符级流式解析，严格对照Rust实现
     buffer = ""
-    buffer_lv = 0  # Track JSON nesting depth
-    in_string = False
-    escape_char = False
+    buffer_lv = 0  # 跟踪JSON嵌套深度: 0=最外层, 1=在数组内但未进入对象, >1=在对象内
+    in_string = False  # 是否在字符串内
+    escape_char = False  # 是否在转义字符后
 
     try:
         async for chunk in response.aiter_bytes():
-            # Check for cancellation
             if cancellation_token and cancellation_token.is_cancelled():
                 break
 
             has_received_data = True
             chunk_str = chunk.decode("utf-8", errors="ignore")
 
-            # Process character by character
             for c in chunk_str:
-                # Check for cancellation during processing
                 if cancellation_token and cancellation_token.is_cancelled():
                     break
 
-                # Handle escaping
+                # 处理转义
                 if in_string and not escape_char and c == "\\":
                     escape_char = True
                     buffer += c
@@ -120,33 +117,26 @@ async def _process_stream_response(
                     buffer += c
                     continue
 
-                # String boundary handling
+                # 字符串边界处理
                 if c == '"' and not escape_char:
                     in_string = not in_string
-                # Increase nesting depth (only outside strings)
-                elif (c in "{[") and not in_string:
+                elif (c == "{" or c == "[") and not in_string:
                     buffer_lv += 1
-                # Decrease nesting depth (only outside strings)
-                elif (c in "}]") and not in_string:
+                elif (c == "}" or c == "]") and not in_string:
                     buffer_lv -= 1
 
-                # Record characters when depth > 1 (inside JSON objects)
+                # 当深度>1，即进入JSON对象内时，记录字符
                 if buffer_lv > 1:
                     if in_string and c == "\n":
-                        buffer += "\\n"  # Handle newlines in strings
+                        buffer += "\\n"
                     else:
                         buffer += c
-
-                # When back to depth 1 (object end) and buffer not empty
+                # 当回到深度1(对象结束)且buffer非空，说明完成了一个对象的处理
                 elif buffer_lv == 1 and buffer:
-                    # Add closing brace since it was read but not added to buffer
                     buffer += "}"
-
-                    # Parse the complete object
+                    # Rust实现：解析整个对象
                     try:
                         json_value = json.loads(buffer)
-
-                        # Extract text content
                         candidates = json_value.get("candidates", [])
                         if candidates:
                             candidate = candidates[0]
@@ -156,32 +146,26 @@ async def _process_stream_response(
                                 part = parts[0]
                                 text = part.get("text", "")
                                 if text:
-                                    # Process reasoning content for thinking models
                                     processed_text = _process_reasoning_content(
                                         text, model
                                     )
-
-                                    if (
-                                        processed_text
-                                    ):  # Only callback if there's content
+                                    if processed_text:
                                         callback(processed_text)
                                         full_response += processed_text
-
-                    except json.JSONDecodeError:
-                        pass  # Ignore parse errors for incomplete objects
-
-                    # Clear buffer for next object
+                    except Exception:
+                        # Rust实现：解析失败时不清空buffer，等待下一个chunk补全
+                        pass
                     buffer = ""
+                # 其余深度0或1的字符直接忽略
 
-            # Break outer loop if cancelled
+            # Rust实现：chunk处理完后不清空buffer，保留未完成对象
             if cancellation_token and cancellation_token.is_cancelled():
                 break
 
-        # Process any remaining buffer
+        # Rust实现：处理最后可能未处理完的buffer
         if buffer and not (cancellation_token and cancellation_token.is_cancelled()):
             if buffer.startswith("{") and not buffer.endswith("}"):
                 buffer += "}"
-
             try:
                 json_value = json.loads(buffer)
                 candidates = json_value.get("candidates", [])
@@ -197,18 +181,15 @@ async def _process_stream_response(
                             if processed_text:
                                 callback(processed_text)
                                 full_response += processed_text
-            except json.JSONDecodeError:
-                pass  # Ignore parse errors for incomplete objects
+            except Exception:
+                pass
 
     except asyncio.CancelledError:
-        # Handle asyncio cancellation
         raise
     except Exception as e:
-        # Handle other exceptions but don't fail silently
         if not full_response:
-            raise e  # Re-raise if we haven't gotten any response yet
+            raise e
 
-    # Check if response is empty but data was received
     if not full_response and has_received_data:
         return "(Response received but requires different format parsing)"
     elif not full_response and not (
