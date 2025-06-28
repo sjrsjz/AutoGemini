@@ -72,6 +72,7 @@ class AutoStreamProcessor:
         callback: Optional[Callable[[str | Exception, "CallbackMsgType"], None]] = None,
         reset_history: bool = False,
         max_cycle_cost: int = 3,
+        tool_code_timeout: float = 10.0,
     ) -> str:
         """
         处理完整的对话，包括ToolCode检测和执行循环
@@ -101,7 +102,7 @@ class AutoStreamProcessor:
 
         # 开始处理循环 - 不再传递user_message
         final_response = await self._process_with_toolcode_loop(
-            callback, max_cycle_cost
+            callback, max_cycle_cost, tool_code_timeout
         )
 
         # 最终响应就是累积的AI输出，不需要重复添加到历史
@@ -113,6 +114,7 @@ class AutoStreamProcessor:
         self,
         callback: Optional[Callable[[str | Exception, "CallbackMsgType"], None]] = None,
         max_cycle_cost: int = 3,
+        tool_code_timeout: float = 10.0,
     ) -> str:
         """
         处理带有ToolCode循环检测的流式输出
@@ -201,12 +203,10 @@ class AutoStreamProcessor:
                     try:
                         if callback:
                             callback(toolcode_content, CallbackMsgType.TOOLCODE_START)
-                        loop = asyncio.get_event_loop()
-                        # execution_results = eval_tool_code(
-                        #     toolcode_content, self.default_api
-                        # )
-                        execution_results = await loop.run_in_executor(
-                            None, eval_tool_code, toolcode_content, self.default_api
+                        execution_results = await eval_tool_code(
+                            toolcode_content,
+                            self.default_api,
+                            timeout=tool_code_timeout,
                         )
                         result_text = self._format_execution_results(execution_results)
                         handle_toolcode_result(result_text, is_error=False)

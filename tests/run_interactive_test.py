@@ -25,8 +25,8 @@ from autogemini.template import ToolCodeInfo
 colorama.init(autoreset=True)
 
 
-import websockets
 import base64
+from websockets.client import connect
 
 
 # WolframAlpha工具
@@ -39,9 +39,7 @@ class WolframAlphaTool:
     async def compute(self, query, image_only=False):
         q = [{"t": 0, "v": query}]
         results = []
-        async with websockets.connect(
-            "wss://gateway.wolframalpha.com/gateway"
-        ) as websocket:
+        async with connect("wss://gateway.wolframalpha.com/gateway") as websocket:
             msg = {
                 "category": "results",
                 "type": "init",
@@ -163,10 +161,8 @@ class InteractiveCLI:
 
     def create_api_handler(self) -> DefaultApi:
         """创建API处理器，兼容事件循环已运行的环境（不使用nest_asyncio）"""
-        import asyncio
-        import concurrent.futures
 
-        def api_handler(method_name: str, *args, **kwargs) -> str:
+        async def api_handler(method_name: str, *args, **kwargs) -> str:
             if method_name == "wolfram_query":
                 query = None
                 if args:
@@ -177,16 +173,7 @@ class InteractiveCLI:
                     return "错误：缺少查询参数"
                 # 运行异步查询，兼容事件循环已运行的环境
                 try:
-                    try:
-                        loop = asyncio.get_running_loop()
-                        # 如果能获取到running loop，说明事件循环已运行
-                        # 必须用线程池调度，否则不能阻塞主loop
-                        with concurrent.futures.ThreadPoolExecutor() as pool:
-                            future = pool.submit(lambda: asyncio.run(self.wolfram_tool.compute(query)))
-                            results = future.result()
-                    except RuntimeError:
-                        # 没有事件循环在运行
-                        results = asyncio.run(self.wolfram_tool.compute(query))
+                    results = await self.wolfram_tool.compute(query)
                 except Exception as e:
                     return f"WolframAlpha 查询失败: {e}"
                 if not results:
@@ -424,7 +411,7 @@ Examples that showcase Alice’s emotional range:
 
         try:
             response = await self.processor.process_conversation(
-                message, callback=stream_callback
+                message, callback=stream_callback, tool_code_timeout=60.0
             )
             print("\n")  # 确保输出后换行
             # 流式输出完成后，显示最终完整回答
