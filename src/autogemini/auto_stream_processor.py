@@ -217,12 +217,14 @@ class AutoStreamProcessor:
                     # 继续循环
                     continue
                 else:
+                    # 没有ToolCode，处理完成
+                    final_response += ai_output
                     # 检查是否存在 `<|start_header|>response<|end_header|>`标记，如果final_response中不存在回复的内容，则继续
                     if "<|start_header|>response<|end_header|>" not in final_response:
                         self.history.append(
                             ChatMessage(
                                 MessageRole.ASSISTANT,
-                                final_response,
+                                ai_output,
                             )
                         )
                         # 模拟系统消息，提示AI必须输出`<|start_header|>response<|end_header|>`标记
@@ -235,8 +237,6 @@ class AutoStreamProcessor:
                         if callback:
                             callback("<Detected no response tag>", CallbackMsgType.INFO)
                         continue
-                    # 没有ToolCode，处理完成
-                    final_response += ai_output
                     self.processing_complete = True
                     self.history.append(ChatMessage(MessageRole.ASSISTANT, ai_output))
 
