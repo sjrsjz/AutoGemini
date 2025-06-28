@@ -189,7 +189,7 @@ class AutoStreamProcessor:
                         self.history.append(
                             ChatMessage(
                                 MessageRole.USER,
-                                f"<|start_header|>system_alert<|end_header|>continue auto processing by using `<|start_header|>call_tool_code<|end_header|>`",
+                                f"<|start_header|>system_alert<|end_header|>\ncontinue auto processing by using `<|start_header|>call_tool_code<|end_header|>`",
                             )
                         )
                         nonlocal final_response
@@ -217,6 +217,24 @@ class AutoStreamProcessor:
                     # 继续循环
                     continue
                 else:
+                    # 检查是否存在 `<|start_header|>response<|end_header|>`标记，如果final_response中不存在回复的内容，则继续
+                    if "<|start_header|>response<|end_header|>" not in final_response:
+                        self.history.append(
+                            ChatMessage(
+                                MessageRole.ASSISTANT,
+                                final_response,
+                            )
+                        )
+                        # 模拟系统消息，提示AI必须输出`<|start_header|>response<|end_header|>`标记
+                        self.history.append(
+                            ChatMessage(
+                                MessageRole.USER,
+                                f"<|start_header|>system_alert<|end_header|>\nTo FINISH the response, please include the `<|start_header|>response<|end_header|>` tag in your output. If you do not include this tag, the system will assume you have not finished your response and will continue processing.",
+                            )
+                        )
+                        if callback:
+                            callback("<Detected no response tag>", CallbackMsgType.INFO)
+                        continue
                     # 没有ToolCode，处理完成
                     final_response += ai_output
                     self.processing_complete = True
