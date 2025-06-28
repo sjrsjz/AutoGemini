@@ -161,6 +161,8 @@ class AutoStreamProcessor:
                     cancellation_token=cancellation_token,
                     timeout=self.timeout,
                 )
+                if stream_buffer == "":
+                    continue  # 如果没有任何输出，继续循环
                 ai_output = stream_buffer
                 # 检查AI输出中是否有ToolCode
                 toolcode_match = self._detect_toolcode_in_call_block(ai_output)
