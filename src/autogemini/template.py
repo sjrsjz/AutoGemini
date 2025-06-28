@@ -9,6 +9,7 @@ import json
 
 
 COT = r"""
+<|start_header|>system_alert<|end_header|>
 # **Chain of Thought (COT)**
 Your response must strictly follow one of the two logical flows below, depending on whether a tool is used.
 
