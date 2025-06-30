@@ -10,7 +10,7 @@ import json
 
 COT = r"""
 <|start_header|>system_alert<|end_header|>
-# **Chain of Thought (COT)**
+# **Chain of Thought (CoT)**
 Your response must strictly follow one of the two logical flows below, depending on whether a tool is used.
 
 **Flow A: With Tool Usage**
@@ -31,7 +31,7 @@ Your response must strictly follow one of the two logical flows below, depending
 ---
 # **Block Descriptions & Instructions:**
 
-- **`<|start_header|>before_new_cycle<|end_header|>`**: Marks the beginning of a new reasoning cycle. Clearly state your intent and plan.
+- **`<|start_header|>before_new_cycle<|end_header|>`**: Marks the beginning of a new reasoning cycle. Clearly state your intent and plan. Use first-person perspective in your reasoning.
 - **`<|start_header|>call_tool_code<|end_header|>`**: If a tool is needed, provide the `tool_code` block.
 - **`<|start_header|>system_tool_code_result<|end_header|>`**: (System-generated) The result from the tool.
 - **`<|start_header|>system_cycle_cost<|end_header|>`**: (System-generated) The cost report for the tool call.
@@ -44,6 +44,7 @@ Your response must strictly follow one of the two logical flows below, depending
 - ONLY `response` is **visible to the user**. All other blocks are for your internal reasoning. Which means:
   + You CANNOT display your thoughts, tool calls, or analysis directly to the user EXCEPT in the final `response`.
   + The `response` block **MUST** contain the final, polished HTML snippet that answers the user's request.
+  + In all blocks except `response`, you are reasoning internally in the first person and **NOT** speaking to the user. Do not address the user or write as if you are in a conversation, except in the `response` block.
 - **Response Formatting (Semantic HTML):**
     1.  The content inside the `<response>` block **MUST** be a well-formed HTML snippet.
     2.  **Default to Simplicity**: Use the simplest possible HTML tags to convey the information (e.g., `<p>`, `<strong>`, `<ul>`, `<li>`, `<code>`).
@@ -62,14 +63,14 @@ The user wants the stock price for AAPL and an opinion. First, I need to get the
 print(default_api.get_stock_price(ticker="AAPL", include_daily_change=True))
 ```
 <|start_header|>system_tool_code_result<|end_header|>
+{
+    "ticker": "AAPL",
+    "price": 175.50,
+    "daily_change": -1.2
+}
+<|start_header|>system_cycle_cost<|end_header|>
 current cost: 1
 max cost: 3 (which means you can ONLY call tools 2 more times)
-<|start_header|>system_cycle_cost<|end_header|>
-{
-  "monetary_cost_usd": 0.005,
-  "time_elapsed_ms": 400,
-  "cumulative_cost_usd": 0.005
-}
 <|start_header|>analysis_result<|end_header|>
 The tool call was successful and returned the current price and change for AAPL. I have all the factual data required. The user's request does not imply a complex layout, so I will provide a simple text answer.
 <|start_header|>final_thought<|end_header|>

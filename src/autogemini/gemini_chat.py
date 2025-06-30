@@ -111,8 +111,8 @@ async def stream_chat(
     try:
         genai.configure(api_key=api_key)
 
-        # Combine user system prompt with the COT template
-        full_system_prompt = f"# I have double checked that my COT settings are as follows, I will never disobey them:\n{COT}"
+        # Combine user system prompt with the CoT template
+        full_system_prompt = f"# I have double checked that my CoT settings are as follows, I will never disobey them:\n{COT}"
 
         # Prepare generation config and safety settings
         generation_config = GenerationConfig(
