@@ -15,7 +15,7 @@ from .template import cot_template, ToolCodeInfo
 from .tool_code import DefaultApi, eval_tool_code
 import re
 import asyncio
-from typing import List, Optional, Callable, Tuple
+from typing import List, Optional, Callable, Tuple, Awaitable
 
 
 class AutoStreamProcessor:
@@ -69,7 +69,9 @@ class AutoStreamProcessor:
     async def process_conversation(
         self,
         user_message: str,
-        callback: Optional[Callable[[str | Exception, "CallbackMsgType"], None]] = None,
+        callback: Optional[
+            Callable[[str | Exception, "CallbackMsgType"], Awaitable[None]]
+        ] = None,
         reset_history: bool = False,
         max_cycle_cost: int = 3,
         tool_code_timeout: float = 10.0,
@@ -112,7 +114,9 @@ class AutoStreamProcessor:
 
     async def _process_with_toolcode_loop(
         self,
-        callback: Optional[Callable[[str | Exception, "CallbackMsgType"], None]] = None,
+        callback: Optional[
+            Callable[[str | Exception, "CallbackMsgType"], Awaitable[None]]
+        ] = None,
         max_cycle_cost: int = 3,
         tool_code_timeout: float = 10.0,
     ) -> str:
@@ -136,18 +140,18 @@ class AutoStreamProcessor:
 
             cancellation_token = StreamCancellation()
 
-            def stream_callback(chunk: str):
+            async def stream_callback(chunk: str):
                 nonlocal stream_buffer
                 stream_buffer += chunk
                 if callback:
-                    callback(chunk, CallbackMsgType.STREAM)
+                    await callback(chunk, CallbackMsgType.STREAM)
                 # 检查是否出现了ToolCode块
                 toolcode_match = self._detect_toolcode_in_call_block(stream_buffer)
                 if toolcode_match:
                     cancellation_token.cancel()  # 取消流式输出
 
+            # 基于当前历史请求AI
             try:
-                # 基于当前历史请求AI
                 await stream_chat(
                     api_key=self.api_key,
                     callback=stream_callback,
@@ -161,95 +165,90 @@ class AutoStreamProcessor:
                     cancellation_token=cancellation_token,
                     timeout=self.timeout,
                 )
-                if stream_buffer == "":
-                    continue  # 如果没有任何输出，继续循环
-                ai_output = stream_buffer
-                # 检查AI输出中是否有ToolCode
-                toolcode_match = self._detect_toolcode_in_call_block(ai_output)
-                if toolcode_match:
-                    toolcode_content, start_pos, end_pos = toolcode_match
-                    before_toolcode = ai_output[:start_pos]
-                    final_response += before_toolcode
-                    final_response += f"```tool_code\n{toolcode_content}\n```\n"
-
-                    def handle_toolcode_result(result_text, is_error=False):
-                        fake_result = f"<|start_header|>system_tool_code_result<|end_header|>\n{result_text}\n<|start_header|>system_cycle_cost<|end_header|>\ncurrent cost: {cost}\nmax cost: {max_cycle_cost}\n"
-                        if cost >= max_cycle_cost:
-                            fake_result += "YOU HAVE REACHED THE MAXIMUM CYCLE COST."
-                        self.history.append(
-                            ChatMessage(
-                                MessageRole.ASSISTANT,
-                                before_toolcode
-                                + "```tool_code\n"
-                                + toolcode_content
-                                + "\n```"
-                                + fake_result,
-                            )
-                        )
-                        self.history.append(
-                            ChatMessage(
-                                MessageRole.USER,
-                                f"<|start_header|>system_alert<|end_header|>\ncontinue auto processing by using `<|start_header|>call_tool_code<|end_header|>`",
-                            )
-                        )
-                        nonlocal final_response
-                        final_response += fake_result
-                        if callback:
-                            cb_type = (
-                                CallbackMsgType.ERROR
-                                if is_error
-                                else CallbackMsgType.TOOLCODE_RESULT
-                            )
-                            callback(result_text, cb_type)
-
-                    try:
-                        if callback:
-                            callback(toolcode_content, CallbackMsgType.TOOLCODE_START)
-                        execution_results = await eval_tool_code(
-                            toolcode_content,
-                            self.default_api,
-                            timeout=tool_code_timeout,
-                        )
-                        result_text = self._format_execution_results(execution_results)
-                        handle_toolcode_result(result_text, is_error=False)
-                    except Exception as e:
-                        handle_toolcode_result(str(e), is_error=True)
-                    # 继续循环
-                    continue
-                else:
-                    # 没有ToolCode，处理完成
-                    final_response += ai_output
-                    # 检查是否存在 `<|start_header|>response<|end_header|>`标记，如果final_response中不存在回复的内容，则继续
-                    if "<|start_header|>response<|end_header|>" not in final_response:
-                        self.history.append(
-                            ChatMessage(
-                                MessageRole.ASSISTANT,
-                                ai_output,
-                            )
-                        )
-                        # 模拟系统消息，提示AI必须输出`<|start_header|>response<|end_header|>`标记
-                        self.history.append(
-                            ChatMessage(
-                                MessageRole.USER,
-                                f"<|start_header|>system_alert<|end_header|>\nTo FINISH the response, please include the `<|start_header|>response<|end_header|>` tag in your output. If you do not include this tag, the system will assume you have not finished your response and will continue processing.",
-                            )
-                        )
-                        if callback:
-                            callback("<Detected no response tag>", CallbackMsgType.INFO)
-                        continue
-                    self.processing_complete = True
-                    self.history.append(ChatMessage(MessageRole.ASSISTANT, ai_output))
-
             except Exception as e:
-                if callback:
-                    callback(e, CallbackMsgType.ERROR)
-                self.processing_complete = True
-                self.history.append(
-                    ChatMessage(
-                        MessageRole.ASSISTANT,
-                        f"<|start_header|>system_error<|end_header|>{str(e)}",
+                # stream_chat的异常直接抛出
+                raise e
+
+            if stream_buffer == "":
+                continue  # 如果没有任何输出，继续循环
+            ai_output = stream_buffer
+            # 检查AI输出中是否有ToolCode
+            toolcode_match = self._detect_toolcode_in_call_block(ai_output)
+            if toolcode_match:
+                toolcode_content, start_pos, end_pos = toolcode_match
+                before_toolcode = ai_output[:start_pos]
+                final_response += before_toolcode
+                final_response += f"```tool_code\n{toolcode_content}\n```\n"
+
+                async def handle_toolcode_result(result_text, is_error=False):
+                    fake_result = f"<|start_header|>system_tool_code_result<|end_header|>\n{result_text}\n<|start_header|>system_cycle_cost<|end_header|>\ncurrent cost: {cost}\nmax cost: {max_cycle_cost}\n"
+                    if cost >= max_cycle_cost:
+                        fake_result += "YOU HAVE REACHED THE MAXIMUM CYCLE COST."
+                    self.history.append(
+                        ChatMessage(
+                            MessageRole.ASSISTANT,
+                            before_toolcode
+                            + "```tool_code\n"
+                            + toolcode_content
+                            + "\n```"
+                            + fake_result,
+                        )
                     )
-                )
+                    self.history.append(
+                        ChatMessage(
+                            MessageRole.USER,
+                            f"<|start_header|>system_alert<|end_header|>\ncontinue auto processing by using `<|start_header|>call_tool_code<|end_header|>`",
+                        )
+                    )
+                    nonlocal final_response
+                    final_response += fake_result
+                    if callback:
+                        cb_type = (
+                            CallbackMsgType.ERROR
+                            if is_error
+                            else CallbackMsgType.TOOLCODE_RESULT
+                        )
+                        await callback(result_text, cb_type)
+
+                try:
+                    if callback:
+                        await callback(toolcode_content, CallbackMsgType.TOOLCODE_START)
+                    execution_results = await eval_tool_code(
+                        toolcode_content,
+                        self.default_api,
+                        timeout=tool_code_timeout,
+                    )
+                    result_text = self._format_execution_results(execution_results)
+                    await handle_toolcode_result(result_text, is_error=False)
+                except Exception as e:
+                    await handle_toolcode_result(str(e), is_error=True)
+                # 继续循环
+                continue
+            else:
+                # 没有ToolCode，处理完成
+                final_response += ai_output
+                # 检查是否存在 `<|start_header|>response<|end_header|>`标记，如果final_response中不存在回复的内容，则继续
+                if "<|start_header|>response<|end_header|>" not in final_response:
+                    self.history.append(
+                        ChatMessage(
+                            MessageRole.ASSISTANT,
+                            ai_output,
+                        )
+                    )
+                    # 模拟系统消息，提示AI必须输出`<|start_header|>response<|end_header|>`标记
+                    self.history.append(
+                        ChatMessage(
+                            MessageRole.USER,
+                            f"<|start_header|>system_alert<|end_header|>\nTo FINISH the response, please include the `<|start_header|>response<|end_header|>` tag in your output. If you do not include this tag, the system will assume you have not finished your response and will continue processing.",
+                        )
+                    )
+                    if callback:
+                        await callback(
+                            "<Detected no response tag>", CallbackMsgType.INFO
+                        )
+                    continue
+                self.processing_complete = True
+                self.history.append(ChatMessage(MessageRole.ASSISTANT, ai_output))
         return final_response
 
     def _detect_toolcode_in_call_block(

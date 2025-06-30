@@ -395,7 +395,7 @@ Examples that showcase Alice’s emotional range:
 
         from autogemini.auto_stream_processor import CallbackMsgType
 
-        def stream_callback(chunk: str | Exception, msg_type: CallbackMsgType):
+        async def stream_callback(chunk: str | Exception, msg_type: CallbackMsgType):
             if msg_type == CallbackMsgType.STREAM:
                 self.force_print(str(chunk), "ai")
             elif msg_type == CallbackMsgType.TOOLCODE_START:

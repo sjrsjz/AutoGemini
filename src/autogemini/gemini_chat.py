@@ -6,7 +6,7 @@ A single function for streaming chat with Gemini API.
 import asyncio
 from dataclasses import dataclass
 from enum import Enum
-from typing import List, Optional, Callable
+from typing import List, Optional, Callable, Awaitable
 
 import google.generativeai as genai
 from google.generativeai.types import GenerationConfig, HarmCategory, HarmBlockThreshold
@@ -69,7 +69,7 @@ def _process_reasoning_content(text: str, model: str) -> str:
 
 async def stream_chat(
     api_key: str,
-    callback: Callable[[str], None],
+    callback: Callable[[str], Awaitable[None]],
     history: Optional[List[ChatMessage]] = None,
     user_message: Optional[str] = None,
     model: str = "gemini-1.5-flash",  # Updated to a common, modern model
@@ -182,7 +182,7 @@ async def stream_chat(
             if chunk.text:
                 processed_text = _process_reasoning_content(chunk.text, model)
                 if processed_text:
-                    callback(processed_text)
+                    await callback(processed_text)
                     full_response_text += processed_text
 
         if not full_response_text and has_received_data:
