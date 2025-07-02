@@ -181,9 +181,9 @@ class AutoStreamProcessor:
                 final_response += f"```tool_code\n{toolcode_content}\n```\n"
 
                 async def handle_toolcode_result(result_text, is_error=False):
-                    fake_result = f"<|start_header|>system_tool_code_result<|end_header|>\n{result_text}\n<|start_header|>system_cycle_cost<|end_header|>\ncurrent cost: {cost}\nmax cost: {max_cycle_cost}\n"
+                    fake_result = f"<|start_header|>system_tool_code_result<|end_header|>\n{result_text}\n<|start_header|>system_cycle_cost<|end_header|>\ncurrent iteration cost: {cost}\nmax iteration cost: {max_cycle_cost}\n"
                     if cost >= max_cycle_cost:
-                        fake_result += "YOU HAVE REACHED THE MAXIMUM CYCLE COST."
+                        fake_result += "YOU HAVE REACHED THE MAXIMUM ITERATION COST. OUTPUT YOUR FINAL RESPONSE NOW."
                     self.history.append(
                         ChatMessage(
                             MessageRole.ASSISTANT,

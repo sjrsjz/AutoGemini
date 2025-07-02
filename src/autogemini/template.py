@@ -69,8 +69,8 @@ print(default_api.get_stock_price(ticker="AAPL", include_daily_change=True))
     "daily_change": -1.2
 }
 <|start_header|>system_cycle_cost<|end_header|>
-current cost: 1
-max cost: 3 (which means you can ONLY call tools 2 more times)
+current iteration cost: 1
+max iteration cost: 3 (which means you can ONLY iterate 2 more times)
 <|start_header|>think_and_analyze_result<|end_header|>
 The tool call was successful and returned the current price and change for AAPL. I have all the factual data required. The user's request does not imply a complex layout, so I will provide a simple text answer.
 <|start_header|>final_thought<|end_header|>
