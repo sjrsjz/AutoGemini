@@ -14,27 +14,32 @@ COT = r"""
 Your response must strictly follow one of the two logical flows below, depending on whether a tool is used.
 
 **Flow A: With Tool Usage**
-1.  `<|start_header|>thought_before_new_cycle<|end_header|>`
+1.  `<|start_header|>think_before_new_iteration<|end_header|>`
 2.  `<|start_header|>call_tool_code<|end_header|>`
 3.  `<|start_header|>tool_code_result_from_system<|end_header|>`
-4.  `<|start_header|>cost_of_iteration<|end_header|>`
+4.  `<|start_header|>cost_of_iteration_from_system<|end_header|>`
 5.  `<|start_header|>thought_for_tool_code_result<|end_header|>`
 (Repeat steps 1-5 as needed)
 6.  `<|start_header|>final_thought<|end_header|>`
 7.  `<|start_header|>response<|end_header|>`
 
 **Flow B: Without Tool Usage**
-1.  `<|start_header|>thought_before_new_cycle<|end_header|>`
+1.  `<|start_header|>think_before_new_iteration<|end_header|>`
 2.  `<|start_header|>final_thought<|end_header|>`
 3.  `<|start_header|>response<|end_header|>`
+
+Since your **Agent** flow will iterate over multiple cycles, it is crucial to maintain a clear and organized structure for each iteration. This will help ensure that all relevant information is captured and processed effectively.
+
+Each iteration should start with the `<|start_header|>think_before_new_iteration<|end_header|>` block, where you outline your thoughts and plans for the iteration. This is followed by the necessary tool calls and their results, as well as your analysis and final thoughts before crafting the response.
 
 ---
 # **Block Descriptions & Instructions:**
 
-- **`<|start_header|>thought_before_new_cycle<|end_header|>`**: Marks the beginning of a new reasoning cycle. Clearly state your intent and plan. Use first-person perspective in your reasoning.
+- **`<|start_header|>think_before_new_iteration<|end_header|>`**: Marks the beginning of a new reasoning iteration. Clearly state your intent and plan. Use first-person perspective in your reasoning.
+  > Note: For **Math** problems, you should always include the relevant equations and variables in this block. Then, **solve the problem step-by-step(No matter how simple it seems)**.
 - **`<|start_header|>call_tool_code<|end_header|>`**: If a tool is needed, provide the `tool_code` block.
 - **`<|start_header|>tool_code_result_from_system<|end_header|>`**: (System-generated) The result from the tool.
-- **`<|start_header|>cost_of_iteration<|end_header|>`**: (System-generated) The cost of the all iterations you have made.
+- **`<|start_header|>cost_of_iteration_from_system<|end_header|>`**: (System-generated) The cost of the all iterations you have made.
 - **`<|start_header|>thought_for_tool_code_result<|end_header|>`**: **Your tactical analysis of the tool's output.** This block is strictly for evaluating the result of the *most recent* tool call. Analyze if the call was successful, if the result is what you expected, and what the next logical *action* is (e.g., "The tool returned the user's ID. Now I need to call the `get_user_orders` tool with this ID," or "I have all the data I need, I will now proceed to craft the final answer.").
 - **`<|start_header|>final_thought<|end_header|>`**: **Your strategic synthesis before the final answer.** This block is **mandatory** before every `<response>`. It is your private, final reasoning space. Here, you must synthesize **all** information gathered from all previous cycles and from your internal knowledge. Plan the structure, content, and tone of your final response. This is not about the next tool call; it is about how you will present the complete answer to the user. Plan the exact HTML structure for the final response.
 - **`<|start_header|>response<|end_header|>`**: Contains **only** the pure HTML snippet planned in your `final_thought`.
@@ -56,7 +61,8 @@ Your response must strictly follow one of the two logical flows below, depending
 
 **User Request**: "Please get the latest stock price for Apple Inc. (AAPL) and tell me if it's a good time to buy, in your opinion."
 
-<|start_header|>thought_before_new_cycle<|end_header|>
+**Example Response**(always starts with `think_before_new_iteration`):
+<|start_header|>think_before_new_iteration<|end_header|>
 The user wants the stock price for AAPL and an opinion. First, I need to get the current stock price using the `get_stock_price` tool. Then I will formulate a text-based response.
 <|start_header|>call_tool_code<|end_header|>
 ```tool_code
@@ -68,7 +74,7 @@ print(default_api.get_stock_price(ticker="AAPL", include_daily_change=True))
     "price": 175.50,
     "daily_change": -1.2
 }
-<|start_header|>cost_of_iteration<|end_header|>
+<|start_header|>cost_of_iteration_from_system<|end_header|>
 current iteration cost: 1
 max iteration cost: 3 (which means you can ONLY iterate 2 more times)
 <|start_header|>thought_for_tool_code_result<|end_header|>
@@ -84,7 +90,8 @@ I will generate a simple HTML response consisting of two paragraphs (`<p>` tags)
 
 **User Request**: "Explain the difference between a list and a tuple in Python."
 
-<|start_header|>thought_before_new_cycle<|end_header|>
+**Example Response**(always starts with `think_before_new_iteration`):
+<|start_header|>think_before_new_iteration<|end_header|>
 The user is asking a fundamental programming question. This is in my internal knowledge base, so no tools are needed. I will provide a simple, structured explanation.
 <|start_header|>final_thought<|end_header|>
 I will structure my answer using simple, standard HTML. I'll start with a summary in a `<p>` tag. Then, I will use an unordered list (`<ul>`) with list items (`<li>`) for the point-by-point comparison. I will use `<strong>` and `<code>` tags for emphasis and clarity. I will not use any unnecessary container `<div>`s or styling, as the request is for a straightforward explanation.
@@ -227,7 +234,7 @@ class ParsedBlock:
     """A structured representation of a single block from the AI's output."""
 
     def __init__(self, block_type: str, content: str):
-        self.type = block_type  # e.g., "thought_before_new_cycle", "call_tool_code"
+        self.type = block_type  # e.g., "think_before_new_iteration", "call_tool_code"
         self.content = content.strip()
 
     def __repr__(self):
@@ -243,7 +250,7 @@ def parse_agent_output(text: str) -> List[ParsedBlock]:
     """
     blocks = []
     # 正则表达式，用于匹配所有可能的块头
-    # - Group 1: block_type (e.g., "thought_before_new_cycle", "response")
+    # - Group 1: block_type (e.g., "think_before_new_iteration", "response")
     # - Group 2: a lazy match for the content until the next block starts or end of string
     pattern = re.compile(
         r"<\|start_header\|>([\w_]+)<\|end_header\|>(.*?)(?=<\|start_header\|>|$)",

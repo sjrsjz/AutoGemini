@@ -5,10 +5,14 @@ __version__ = "0.1.0"
 # gemini_chat
 from .gemini_chat import (
     MessageRole,
+    MediaType,
     ChatMessage,
+    MediaFile,
     StreamCancellation,
     stream_chat,
     fetch_available_models,
+    create_multimodal_message,
+    suggest_model_for_content,
 )
 
 # auto_stream_processor

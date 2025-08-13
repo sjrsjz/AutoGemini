@@ -4,9 +4,13 @@ A single function for streaming chat with Gemini API.
 """
 
 import asyncio
-from dataclasses import dataclass
+import base64
+import mimetypes
+import os
+from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Optional, Callable, Awaitable
+from pathlib import Path
+from typing import List, Optional, Callable, Awaitable, Union
 
 import google.generativeai as genai
 from google.generativeai.types import GenerationConfig, HarmCategory, HarmBlockThreshold
@@ -22,12 +26,185 @@ class MessageRole(Enum):
     ASSISTANT = "assistant"
 
 
+class MediaType(Enum):
+    """Supported media types for multimodal input."""
+
+    IMAGE = "image"
+    AUDIO = "audio"
+    VIDEO = "video"
+    DOCUMENT = "document"
+
+
+def _detect_mime_type_from_data(data: bytes) -> Optional[str]:
+    """Detect MIME type from file data using magic bytes."""
+    if not data:
+        return None
+
+    # Check common image formats
+    if data.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    elif data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    elif data.startswith(b"GIF8"):
+        return "image/gif"
+    elif data.startswith(b"RIFF") and b"WEBP" in data[:12]:
+        return "image/webp"
+    elif data.startswith(b"\x00\x00\x00\x18ftypheic") or data.startswith(
+        b"\x00\x00\x00\x1cftypmif1"
+    ):
+        return "image/heic"
+
+    # Check common video formats
+    elif data.startswith(b"\x00\x00\x00\x18ftyp") or data.startswith(
+        b"\x00\x00\x00\x20ftyp"
+    ):
+        return "video/mp4"
+    elif data.startswith(b"RIFF") and b"AVI " in data[:12]:
+        return "video/avi"
+
+    # Check common audio formats
+    elif data.startswith(b"ID3") or data.startswith(b"\xff\xfb"):
+        return "audio/mp3"
+    elif data.startswith(b"RIFF") and b"WAVE" in data[:12]:
+        return "audio/wav"
+    elif data.startswith(b"fLaC"):
+        return "audio/flac"
+
+    # Check PDF
+    elif data.startswith(b"%PDF"):
+        return "application/pdf"
+
+    # Default to binary if unknown
+    return "application/octet-stream"
+
+
+def _get_media_type_from_mime(mime_type: str) -> MediaType:
+    """Get MediaType from MIME type."""
+    if mime_type.startswith("image/"):
+        return MediaType.IMAGE
+    elif mime_type.startswith("audio/"):
+        return MediaType.AUDIO
+    elif mime_type.startswith("video/"):
+        return MediaType.VIDEO
+    else:
+        return MediaType.DOCUMENT
+
+
+def _is_supported_media_type(mime_type: str) -> bool:
+    """Check if the MIME type is supported by Gemini API."""
+    supported_types = {
+        # Images
+        "image/png",
+        "image/jpeg",
+        "image/webp",
+        "image/heic",
+        "image/heif",
+        # Audio
+        "audio/wav",
+        "audio/mp3",
+        "audio/aiff",
+        "audio/aac",
+        "audio/ogg",
+        "audio/flac",
+        # Video
+        "video/mp4",
+        "video/mpeg",
+        "video/mov",
+        "video/avi",
+        "video/x-flv",
+        "video/mpg",
+        "video/webm",
+        "video/wmv",
+        "video/3gpp",
+        # Documents
+        "application/pdf",
+        "text/plain",
+    }
+    return mime_type in supported_types
+
+
+def _validate_media_file(
+    media_file: "MediaFile", max_file_size: int = 20 * 1024 * 1024
+) -> None:
+    """Validate media file size and format."""
+    if not media_file.data:
+        raise ValueError("Media file data is empty")
+
+    if len(media_file.data) > max_file_size:
+        raise ValueError(
+            f"File size {len(media_file.data)} bytes exceeds maximum {max_file_size} bytes"
+        )
+
+    if not media_file.mime_type:
+        raise ValueError("Could not determine MIME type for media file")
+
+    if not _is_supported_media_type(media_file.mime_type):
+        raise ValueError(f"Unsupported media type: {media_file.mime_type}")
+
+
+def _prepare_media_for_api(media_file: "MediaFile") -> dict:
+    """Prepare media file for Gemini API."""
+    _validate_media_file(media_file)
+
+    return {
+        "mime_type": media_file.mime_type,
+        "data": base64.b64encode(media_file.data).decode("utf-8"),
+    }
+
+
+@dataclass
+class MediaFile:
+    """Represents a media file for multimodal input."""
+
+    file_path: Optional[str] = None
+    data: Optional[bytes] = None
+    mime_type: Optional[str] = None
+    media_type: Optional[MediaType] = None
+
+    def __post_init__(self):
+        """Validate and infer media type and MIME type."""
+        if not self.file_path and not self.data:
+            raise ValueError("Either file_path or data must be provided")
+
+        if self.file_path and not self.data:
+            # Read file data
+            path = Path(self.file_path)
+            if not path.exists():
+                raise FileNotFoundError(f"File not found: {self.file_path}")
+
+            self.data = path.read_bytes()
+
+        # Infer MIME type if not provided
+        if not self.mime_type:
+            if self.file_path:
+                self.mime_type, _ = mimetypes.guess_type(self.file_path)
+
+            if not self.mime_type:
+                # Try to detect from data
+                self.mime_type = _detect_mime_type_from_data(self.data)
+
+        # Infer media type from MIME type
+        if not self.media_type and self.mime_type:
+            self.media_type = _get_media_type_from_mime(self.mime_type)
+
+
 @dataclass
 class ChatMessage:
-    """Simple chat message."""
+    """Chat message that can contain text and media files."""
 
     role: MessageRole
     content: str
+    media_files: List[MediaFile] = field(default_factory=list)
+
+    def add_media_file(
+        self,
+        file_path: Optional[str] = None,
+        data: Optional[bytes] = None,
+        mime_type: Optional[str] = None,
+    ) -> None:
+        """Add a media file to this message."""
+        media_file = MediaFile(file_path=file_path, data=data, mime_type=mime_type)
+        self.media_files.append(media_file)
 
 
 class StreamCancellation:
@@ -72,6 +249,7 @@ async def stream_chat(
     callback: Callable[[str], Awaitable[None]],
     history: Optional[List[ChatMessage]] = None,
     user_message: Optional[str] = None,
+    user_media_files: Optional[List[Union[str, MediaFile]]] = None,
     model: str = "gemini-2.5-flash",  # Updated to a common, modern model
     system_prompt: Optional[str] = None,
     temperature: float = 1.0,
@@ -89,7 +267,8 @@ async def stream_chat(
         callback: Function to call with each chunk of response
         history: Optional list of previous chat messages
         user_message: Optional user's message to send (if None, uses only history)
-        model: Gemini model to use
+        user_media_files: Optional list of media files (file paths or MediaFile objects) to include with user_message
+        model: Gemini model to use (use vision models for image processing)
         system_prompt: Optional system prompt
         temperature: Sampling temperature (0.0-1.0)
         max_tokens: Maximum tokens to generate
@@ -105,8 +284,10 @@ async def stream_chat(
         ValueError: If API request fails or no response generated
         asyncio.CancelledError: If cancelled via cancellation_token or asyncio
     """
-    if not user_message and not history:
-        raise ValueError("Either history or user_message must be provided.")
+    if not user_message and not history and not user_media_files:
+        raise ValueError(
+            "Either history, user_message, or user_media_files must be provided."
+        )
 
     try:
         genai.configure(api_key=api_key)
@@ -153,12 +334,41 @@ async def stream_chat(
         if history:
             for message in history:
                 role = "user" if message.role == MessageRole.USER else "model"
-                api_history.append({"role": role, "parts": [message.content]})
+                parts = [message.content] if message.content else []
+
+                # Add media files if present
+                if hasattr(message, "media_files") and message.media_files:
+                    for media_file in message.media_files:
+                        parts.append(_prepare_media_for_api(media_file))
+
+                if parts:  # Only add if there are parts
+                    api_history.append({"role": role, "parts": parts})
 
         # Add the user's new message to the end of the history to be sent
         messages_to_send = list(api_history)
-        if user_message:
-            messages_to_send.append({"role": "user", "parts": [user_message]})
+        if user_message or user_media_files:
+            parts = []
+
+            # Add text content if provided
+            if user_message:
+                parts.append(user_message)
+
+            # Add media files if provided
+            if user_media_files:
+                for media_item in user_media_files:
+                    if isinstance(media_item, str):
+                        # File path provided
+                        media_file = MediaFile(file_path=media_item)
+                    elif isinstance(media_item, MediaFile):
+                        # MediaFile object provided
+                        media_file = media_item
+                    else:
+                        raise ValueError(f"Invalid media item type: {type(media_item)}")
+
+                    parts.append(_prepare_media_for_api(media_file))
+
+            if parts:
+                messages_to_send.append({"role": "user", "parts": parts})
 
         if not messages_to_send:
             raise ValueError("No content to send to the model.")
@@ -250,7 +460,6 @@ def _is_valid_gemini_model(model_id: str) -> bool:
     """Check if model meets our filtering criteria."""
     import re
 
-    # This filtering logic is kept from the original implementation.
     # Check if it matches gemini-[version]-* pattern
     pattern = re.compile(r"^gemini-([1-9]|10)\.([0-9]|10)-")
     if not pattern.match(model_id):
@@ -258,25 +467,70 @@ def _is_valid_gemini_model(model_id: str) -> bool:
         if not model_id.startswith("gemini-"):
             return False
 
-    # Exclude models containing specific keywords
+    # Exclude models containing specific keywords (updated for multimodal support)
     excluded_keywords = [
-        "vision",
         "embedding",
-        "audio",
         "tts",
         "exp",
         "native",
         "dialog",
         "live",
-        "image",
+        # Removed "vision", "audio", "image" to support multimodal models
         # "thinking" is kept to allow reasoning models but filter their output
     ]
 
     model_lower = model_id.lower()
     for keyword in excluded_keywords:
         if keyword in model_lower:
-            # Special case: allow 'gemini-1.5-pro-vision-latest' if needed in future
-            # for now, we follow the original exclusion
             return False
 
     return True
+
+
+def create_multimodal_message(
+    content: str, media_files: Optional[List[Union[str, MediaFile]]] = None
+) -> ChatMessage:
+    """
+    Create a ChatMessage with text and media files.
+
+    Args:
+        content: Text content of the message
+        media_files: List of file paths or MediaFile objects
+
+    Returns:
+        ChatMessage with text and media content
+    """
+    message = ChatMessage(role=MessageRole.USER, content=content)
+
+    if media_files:
+        for media_item in media_files:
+            if isinstance(media_item, str):
+                message.add_media_file(file_path=media_item)
+            elif isinstance(media_item, MediaFile):
+                message.media_files.append(media_item)
+            else:
+                raise ValueError(f"Invalid media item type: {type(media_item)}")
+
+    return message
+
+
+def suggest_model_for_content(
+    has_images: bool = False, has_audio: bool = False, has_video: bool = False
+) -> str:
+    """
+    Suggest an appropriate Gemini model based on the content type.
+
+    Args:
+        has_images: Whether the content includes images
+        has_audio: Whether the content includes audio
+        has_video: Whether the content includes video
+
+    Returns:
+        Suggested model name
+    """
+    if has_images or has_video:
+        return "gemini-1.5-pro-vision-latest"  # Best for visual content
+    elif has_audio:
+        return "gemini-1.5-pro"  # Good for audio processing
+    else:
+        return "gemini-2.5-flash"  # Default for text-only
