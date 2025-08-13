@@ -72,7 +72,7 @@ async def stream_chat(
     callback: Callable[[str], Awaitable[None]],
     history: Optional[List[ChatMessage]] = None,
     user_message: Optional[str] = None,
-    model: str = "gemini-1.5-flash",  # Updated to a common, modern model
+    model: str = "gemini-2.5-flash",  # Updated to a common, modern model
     system_prompt: Optional[str] = None,
     temperature: float = 1.0,
     max_tokens: int = 8192,

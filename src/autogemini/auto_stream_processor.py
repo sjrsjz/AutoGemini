@@ -34,6 +34,8 @@ class AutoStreamProcessor:
         top_p: float = 0.95,
         top_k: int = 40,
         timeout: float = 300.0,
+        api_delay: float = 0.0,
+        max_output_size: int = 65536,
     ):
         """
         初始化自动流式处理器
@@ -48,6 +50,8 @@ class AutoStreamProcessor:
             top_p: Top-p采样参数
             top_k: Top-k采样参数
             timeout: 请求超时时间
+            api_delay: API调用后的延迟时间(秒)，用于避免速率限制
+            max_output_size: ToolCode执行时print输出的最大字节数限制
         """
         self.api_key = api_key
         self.default_api = default_api
@@ -58,6 +62,8 @@ class AutoStreamProcessor:
         self.top_p = top_p
         self.top_k = top_k
         self.timeout = timeout
+        self.api_delay = api_delay
+        self.max_output_size = max_output_size
 
         # 对话历史
         self.history: List[ChatMessage] = []
@@ -165,6 +171,11 @@ class AutoStreamProcessor:
                     cancellation_token=cancellation_token,
                     timeout=self.timeout,
                 )
+
+                # 添加API调用后的延迟，避免速率限制
+                if self.api_delay > 0:
+                    await asyncio.sleep(self.api_delay)
+
             except Exception as e:
                 # stream_chat的异常直接抛出
                 raise e
@@ -181,7 +192,7 @@ class AutoStreamProcessor:
                 final_response += f"```tool_code\n{toolcode_content}\n```\n"
 
                 async def handle_toolcode_result(result_text, is_error=False):
-                    fake_result = f"<|start_header|>system_tool_code_result<|end_header|>\n{result_text}\n<|start_header|>system_cycle_cost<|end_header|>\ncurrent iteration cost: {cost}\nmax iteration cost: {max_cycle_cost}\n"
+                    fake_result = f"<|start_header|>tool_code_result_from_system<|end_header|>\n{result_text}\n<|start_header|>cost_of_iteration<|end_header|>\ncurrent iteration cost: {cost}\nmax iteration cost: {max_cycle_cost}\n"
                     if cost >= max_cycle_cost:
                         fake_result += "YOU HAVE REACHED THE MAXIMUM ITERATION COST. OUTPUT YOUR FINAL RESPONSE NOW."
                     self.history.append(
@@ -217,6 +228,7 @@ class AutoStreamProcessor:
                         toolcode_content,
                         self.default_api,
                         timeout=tool_code_timeout,
+                        max_output_size=self.max_output_size,
                     )
                     result_text = self._format_execution_results(execution_results)
                     await handle_toolcode_result(result_text, is_error=False)
@@ -390,7 +402,8 @@ def create_cot_processor(
         default_api: ToolCode API处理器
         tool_codes: 可用的工具代码列表
         character_description: 角色描述
-        **kwargs: 其他参数传递给AutoStreamProcessor
+        respond_tags_description: 响应标签描述
+        **kwargs: 其他参数传递给AutoStreamProcessor，包括api_delay等
 
     Returns:
         配置好的AutoStreamProcessor实例

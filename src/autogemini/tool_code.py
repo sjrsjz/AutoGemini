@@ -97,7 +97,10 @@ SAFE_BUILTINS = {
 # 3. 核心沙箱执行器 (eval_tool_code)
 # ==============================================================================
 async def eval_tool_code(
-    tool_code: str, default_api: DefaultApi, timeout: float = 5.0
+    tool_code: str,
+    default_api: DefaultApi,
+    timeout: float = 5.0,
+    max_output_size: int = 65536,
 ) -> List[Dict]:
     """
     在一个安全、受限、带资源限制的环境中，异步地评估工具代码。
@@ -107,6 +110,7 @@ async def eval_tool_code(
         tool_code: AI生成的、需要执行的代码字符串。
         default_api: 异步API处理器实例。
         timeout: 代码执行的超时秒数。
+        max_output_size: print输出内容的最大字节数限制，防止内存攻击。
 
     Returns:
         由 `print` 函数捕获的执行结果列表。
@@ -116,9 +120,9 @@ async def eval_tool_code(
     def safe_print(*args, **kwargs):
         # Limit the total print output size to prevent memory attacks
         total_size = sum(len(str(a)) for a in args)
-        if total_size > 65536:  # 64KB
+        if total_size > max_output_size:
             raise MemoryError(
-                "The output content of the tool code exceeds the 64KB limit."
+                f"The output content of the tool code exceeds the {max_output_size} bytes limit."
             )
         results.append({"args": args, "kwargs": kwargs})
 
@@ -256,8 +260,9 @@ class ToolCodeProcessor:
     整个流程是异步的。
     """
 
-    def __init__(self, default_api: DefaultApi):
+    def __init__(self, default_api: DefaultApi, max_output_size: int = 65536):
         self.default_api = default_api
+        self.max_output_size = max_output_size
         self.buffer = ""
         self.tool_code_pattern = re.compile(r"", re.DOTALL)
 
@@ -290,7 +295,12 @@ class ToolCodeProcessor:
 
     async def _execute_tool_code(self, tool_code: str) -> List[Dict]:
         """异步执行工具代码，调用核心沙箱函数。"""
-        return await eval_tool_code(tool_code, self.default_api, timeout=5.0)
+        return await eval_tool_code(
+            tool_code,
+            self.default_api,
+            timeout=5.0,
+            max_output_size=self.max_output_size,
+        )
 
     def _format_execution_result(self, results: List[Dict]) -> str:
         """格式化执行结果为字符串。"""
@@ -314,6 +324,7 @@ async def process_streaming_response(
     stream_generator,
     default_api: DefaultApi,
     on_tool_execution: Optional[Callable[[str, Any], None]] = None,
+    max_output_size: int = 65536,
 ) -> str:
     """
     处理完整的流式响应，自动处理tool_code执行和替换
@@ -322,11 +333,12 @@ async def process_streaming_response(
         stream_generator: 流式输出生成器
         default_api: API处理器实例
         on_tool_execution: 工具执行时的回调函数
+        max_output_size: print输出内容的最大字节数限制
 
     Returns:
         完整的处理后响应
     """
-    processor = ToolCodeProcessor(default_api)
+    processor = ToolCodeProcessor(default_api, max_output_size=max_output_size)
     final_output = ""
 
     for chunk in stream_generator:
@@ -350,9 +362,13 @@ async def process_streaming_response(
 # 使用示例和辅助函数
 
 
-def create_streaming_handler(default_api: DefaultApi):
+def create_streaming_handler(default_api: DefaultApi, max_output_size: int = 65536):
     """
     创建一个流式处理句柄，用于实际的LLM API集成
+
+    Args:
+        default_api: API处理器实例
+        max_output_size: print输出内容的最大字节数限制
 
     使用示例:
     ```python
@@ -381,21 +397,24 @@ def create_streaming_handler(default_api: DefaultApi):
             break
     ```
     """
-    return ToolCodeProcessor(default_api)
+    return ToolCodeProcessor(default_api, max_output_size=max_output_size)
 
 
-async def extract_and_execute_all_tool_codes(text: str, default_api: DefaultApi) -> str:
+async def extract_and_execute_all_tool_codes(
+    text: str, default_api: DefaultApi, max_output_size: int = 65536
+) -> str:
     """
     一次性提取并执行文本中的所有tool_code块
 
     Args:
         text: 包含tool_code的文本
         default_api: API处理器
+        max_output_size: print输出内容的最大字节数限制
 
     Returns:
         替换所有tool_code后的文本
     """
-    processor = ToolCodeProcessor(default_api)
+    processor = ToolCodeProcessor(default_api, max_output_size=max_output_size)
 
     # 模拟流式处理，但一次性处理完整文本
     result, _ = await processor.process_stream_chunk(text)
