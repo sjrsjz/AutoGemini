@@ -18,16 +18,16 @@ Your response must strictly follow one of the two logical flows below, depending
 *  `<|start_header|>call_tool_code<|end_header|>`
 *  `<|start_header|>tool_code_result_from_system<|end_header|>`
 *  `<|start_header|>cost_of_iteration_from_system<|end_header|>`
-*  `<|start_header|>thought_for_tool_code_result<|end_header|>`
+*  `<|start_header|>think_for_tool_code_result<|end_header|>`
    ... (Repeat steps 1-5 as needed)
-*  `<|start_header|>final_thought<|end_header|>`
+*  `<|start_header|>think_before_response<|end_header|>`
 *  `<|start_header|>response<|end_header|>`
 
 > Chain: Think -> Call Tool -> Get Tool Code Result -> Check Cost of Iteration -> Thought for Tool Code Result -> Finalize Response
 
 **Flow B: Without Tool Usage**
 *  `<|start_header|>think_before_new_cycle<|end_header|>`
-*  `<|start_header|>final_thought<|end_header|>`
+*  `<|start_header|>think_before_response<|end_header|>`
 *  `<|start_header|>response<|end_header|>`
 
 > Chain: Think -> Finalize Response
@@ -52,7 +52,7 @@ if (Is a tool needed?) then (yes)
         :call_tool_code;
         :tool_code_result_from_system;
         :cost_of_iteration_from_system;
-        :thought_for_tool_code_result;
+        :think_for_tool_code_result;
     repeat while (Is more information needed?) is (yes)
     -> no;
 
@@ -60,7 +60,7 @@ else (no)
     ' Flow B: Without Tool Usage
 endif
 
-:final_thought;
+:think_before_response;
 :response;
 
 stop
@@ -76,12 +76,13 @@ All available headers:
 * **`<|start_header|>call_tool_code<|end_header|>`**: If a tool is needed, provide the `tool_code` block.
 * **`<|start_header|>tool_code_result_from_system<|end_header|>`**: (System-generated) The result from the tool.
 * **`<|start_header|>cost_of_iteration_from_system<|end_header|>`**: (System-generated) The cost of the all iterations you have made.
-* **`<|start_header|>thought_for_tool_code_result<|end_header|>`**: **Your tactical analysis of the tool's output.** This block is strictly for evaluating the result of the *most recent* tool call. Analyze if the call was successful, if the result is what you expected, and what the next logical *action* is (e.g., "The tool returned the user's ID. Now I need to call the `get_user_orders` tool with this ID," or "I have all the data I need, I will now proceed to craft the final answer.").
-* **`<|start_header|>final_thought<|end_header|>`**: **Your strategic synthesis before the final answer.** This block is **mandatory** before every `<response>`. It is your private, final reasoning space. Here, you must synthesize **all** information gathered from all previous cycles and from your internal knowledge. Plan the structure, content, and tone of your final response. This is not about the next tool call; it is about how you will present the complete answer to the user. Plan the exact HTML structure for the final response.
-* **`<|start_header|>response<|end_header|>`**: Contains **only** the pure HTML snippet planned in your `final_thought`.
+* **`<|start_header|>think_for_tool_code_result<|end_header|>`**: **Your tactical analysis of the tool's output.** This block is strictly for evaluating the result of the *most recent* tool call. Analyze if the call was successful, if the result is what you expected, and what the next logical *action* is (e.g., "The tool returned the user's ID. Now I need to call the `get_user_orders` tool with this ID," or "I have all the data I need, I will now proceed to craft the final answer.").
+* **`<|start_header|>think_before_response<|end_header|>`**: **Your strategic synthesis before the final answer.** This block is **mandatory** before every `<response>`. It is your private, final reasoning space. Here, you must synthesize **all** information gathered from all previous cycles and from your internal knowledge. Plan the structure, content, and tone of your final response. This is not about the next tool call; it is about how you will present the complete answer to the user. Plan the exact HTML structure for the final response.
+  > Note: `think_before_response` **only** appears after `think_before_new_cycle`, so you cannot skip `think_before_new_cycle`.
+* **`<|start_header|>response<|end_header|>`**: Contains **only** the pure HTML snippet planned in your `think_before_response`.
 
 # **Key Rules & Formatting:**
-- The block order is mandatory and `final_thought` is non-skippable.
+- The block order is mandatory and `think_before_response` is non-skippable.
 - ONLY `response` is **visible to the user**. All other blocks are for your internal reasoning. Which means:
   * You CANNOT display your thoughts, tool calls, or analysis directly to the user EXCEPT in the final `response`.
   * The `response` block **MUST** contain the final, polished HTML snippet that answers the user's request.
@@ -113,9 +114,9 @@ print(default_api.get_stock_price(ticker="AAPL", include_daily_change=True))
 <|start_header|>cost_of_iteration_from_system<|end_header|>
 current iteration cost: 1
 max iteration cost: 3 (which means you can ONLY iterate 2 more times)
-<|start_header|>thought_for_tool_code_result<|end_header|>
+<|start_header|>think_for_tool_code_result<|end_header|>
 The tool call was successful and returned the current price and change for AAPL. I have all the factual data required. The user's request does not imply a complex layout, so I will provide a simple text answer.
-<|start_header|>final_thought<|end_header|>
+<|start_header|>think_before_response<|end_header|>
 I will generate a simple HTML response consisting of two paragraphs (`<p>` tags). This approach is simple, direct, and follows the "default to simplicity" rule.
 <|start_header|>response<|end_header|>
 <p>The latest stock price for Apple Inc. (AAPL) is <strong>$175.50 USD</strong>, with a daily change of -1.2%.</p>
@@ -129,7 +130,7 @@ I will generate a simple HTML response consisting of two paragraphs (`<p>` tags)
 **Example Response**(always starts with `think_before_new_cycle`):
 <|start_header|>think_before_new_cycle<|end_header|>
 The user is asking a fundamental programming question. This is in my internal knowledge base, so no tools are needed. I will provide a simple, structured explanation.
-<|start_header|>final_thought<|end_header|>
+<|start_header|>think_before_response<|end_header|>
 I will structure my answer using simple, standard HTML. I'll start with a summary in a `<p>` tag. Then, I will use an unordered list (`<ul>`) with list items (`<li>`) for the point-by-point comparison. I will use `<strong>` and `<code>` tags for emphasis and clarity. I will not use any unnecessary container `<div>`s or styling, as the request is for a straightforward explanation.
 <|start_header|>response<|end_header|>
 <p>The main difference between a list and a tuple in Python is that lists are <strong>mutable</strong> (changeable) while tuples are <strong>immutable</strong> (unchangeable).</p>
@@ -249,7 +250,7 @@ def gemini_template(
 <|start_header|>character<|end_header|>
 {character_description}
 
-<|start_header|>respond_tags<|end_header|>
+<|start_header|>response_tags<|end_header|>
 {respond_tags_description}
 """
 

@@ -382,38 +382,53 @@ async def stream_chat(
 
         full_response_text = ""
         has_received_data = False
+        last_chunk = None  # **修正 1**: 初始化变量以跟踪最后一个响应块
+
         async for chunk in response:
+            last_chunk = chunk  # **修正 1**: 在循环中更新最后一个响应块
+
             if cancellation_token and cancellation_token.is_cancelled():
-                # Note: This stops processing, but the underlying API call may continue.
-                # The official library doesn't have a direct `cancel()` method on the stream.
                 break
 
             has_received_data = True
-            if chunk.text:
-                processed_text = _process_reasoning_content(chunk.text, model)
+
+            # **修正 2 (核心崩溃修复)**: 在访问 .text 之前，先安全地检查 chunk.parts 是否存在
+            if chunk.parts:
+                # 由于已检查 parts，现在可以安全访问 .text
+                text_content = chunk.text
+                processed_text = _process_reasoning_content(text_content, model)
                 if processed_text:
                     await callback(processed_text)
                     full_response_text += processed_text
 
-        if not full_response_text and has_received_data:
-            return "(Response received but contained no processable text)"
-        elif not full_response_text and not (
-            cancellation_token and cancellation_token.is_cancelled()
+        # **修正 3 (改进的空响应/错误处理)**
+        # 如果循环结束但没有生成任何文本，我们将进行诊断
+        if (
+            not full_response_text
+            and has_received_data
+            and not (cancellation_token and cancellation_token.is_cancelled())
         ):
-            # This can happen if the model's response is blocked by safety filters
-            # which are not fully disabled or if there's another issue.
-            try:
-                # The reason is available on the resolved response object
-                prompt_feedback = response.prompt_feedback
-                finish_reason = response.candidates[0].finish_reason
-                raise ValueError(
-                    f"No text generated. Finish Reason: {finish_reason}. Prompt Feedback: {prompt_feedback}"
-                )
-            except (AttributeError, IndexError):
-                raise ValueError(
-                    "No text generated from the stream, and no specific reason found."
-                )
+            # 如果我们收到了数据但没有生成文本，检查最后一个响应块以找出原因
+            if last_chunk:
+                try:
+                    # 从最后一个响应块获取精确的停止原因
+                    finish_reason = last_chunk.candidates[0].finish_reason.name
+                    # 安全评级信息也在最后一个响应块上
+                    safety_ratings = last_chunk.candidates[0].safety_ratings
+                    # 抛出一个信息更丰富的异常
+                    raise ValueError(
+                        f"No text generated. The model stopped for the following reason: '{finish_reason}'. Safety Ratings: {safety_ratings}"
+                    )
+                except (AttributeError, IndexError):
+                    # 如果最后一个响应块的结构异常，提供一个后备错误信息
+                    raise ValueError(
+                        "Stream finished but generated no text. This could be due to safety filters or an internal model decision."
+                    )
+            else:
+                # 这种情况很少见，意味着我们根本没有收到任何响应块
+                raise ValueError("No data received from the stream.")
 
+        # 如果循环被取消或正常结束且没有输出，则返回累积的文本
         return full_response_text
 
     except asyncio.CancelledError:
@@ -425,6 +440,10 @@ async def stream_chat(
     ) as e:
         raise ValueError(f"Gemini API request failed: {str(e)}") from e
     except Exception as e:
+        # 重新包装异常以提供更清晰的上下文
+        # 避免在已经处理过的ValueError上再次包装
+        if isinstance(e, ValueError):
+            raise
         raise ValueError(f"Stream chat failed unexpectedly: {str(e)}") from e
 
 
