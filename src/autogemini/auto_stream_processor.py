@@ -15,7 +15,7 @@ from .template import cot_template, ToolCodeInfo
 from .tool_code import DefaultApi, eval_tool_code
 import re
 import asyncio
-from typing import List, Optional, Callable, Tuple, Awaitable
+from typing import List, Optional, Callable, Tuple, Awaitable, Union
 
 
 class AutoStreamProcessor:
@@ -74,7 +74,7 @@ class AutoStreamProcessor:
 
     async def process_conversation(
         self,
-        user_message: str,
+        user_message: Union[str, ChatMessage],
         callback: Optional[
             Callable[[str | Exception, "CallbackMsgType"], Awaitable[None]]
         ] = None,
@@ -86,9 +86,11 @@ class AutoStreamProcessor:
         处理完整的对话，包括ToolCode检测和执行循环
 
         Args:
-            user_message: 用户消息
+            user_message: 用户消息，可以是字符串或ChatMessage对象（支持多媒体）
             callback: 回调函数，callback(chunk: str, msg_type: CallbackMsgType)
             reset_history: 是否重置对话历史
+            max_cycle_cost: 最大循环次数
+            tool_code_timeout: 工具代码超时时间
 
         Returns:
             完整的AI响应
@@ -96,13 +98,35 @@ class AutoStreamProcessor:
         if reset_history:
             self.history.clear()
 
-        # 只在开始时添加用户消息到历史
-        self.history.append(
-            ChatMessage(
+        # 处理不同类型的用户消息输入
+        if isinstance(user_message, str):
+            # 字符串消息：保持原有逻辑
+            message_to_add = ChatMessage(
                 MessageRole.USER,
                 f"<|start_header|>user_message<|end_header|>{user_message}",
             )
-        )
+        elif isinstance(user_message, ChatMessage):
+            # ChatMessage对象：检查并调整格式
+            if user_message.role != MessageRole.USER:
+                raise ValueError("ChatMessage must have USER role")
+
+            # 为ChatMessage添加header格式，保持与现有逻辑一致
+            content = user_message.content
+            if not content.startswith("<|start_header|>user_message<|end_header|>"):
+                content = f"<|start_header|>user_message<|end_header|>{content}"
+
+            message_to_add = ChatMessage(
+                role=MessageRole.USER,
+                content=content,
+                media_files=getattr(user_message, "media_files", []),
+            )
+        else:
+            raise TypeError(
+                f"user_message must be str or ChatMessage, got {type(user_message)}"
+            )
+
+        # 添加消息到历史
+        self.history.append(message_to_add)
 
         # 重置处理状态
         self.current_response = ""
@@ -352,6 +376,41 @@ class AutoStreamProcessor:
     def set_system_prompt(self, prompt: str):
         """设置系统提示词"""
         self.system_prompt = prompt
+
+    def create_user_message(
+        self, content: str, media_files: Optional[List] = None
+    ) -> ChatMessage:
+        """
+        创建用户消息的便利方法
+
+        Args:
+            content: 消息内容
+            media_files: 媒体文件列表（文件路径字符串或MediaFile对象）
+
+        Returns:
+            ChatMessage对象
+        """
+        from .gemini_chat import MediaFile
+
+        message = ChatMessage(role=MessageRole.USER, content=content)
+
+        if media_files:
+            # 确保media_files属性存在
+            if not hasattr(message, "media_files"):
+                message.media_files = []
+
+            for media_item in media_files:
+                if isinstance(media_item, str):
+                    # 文件路径
+                    media_file = MediaFile(file_path=media_item)
+                    message.media_files.append(media_file)
+                elif hasattr(media_item, "file_path") or hasattr(media_item, "data"):
+                    # MediaFile对象
+                    message.media_files.append(media_item)
+                else:
+                    raise ValueError(f"Invalid media item type: {type(media_item)}")
+
+        return message
 
 
 # TAGS描述，指导模型生成易于转换为纯文本的、干净的HTML
