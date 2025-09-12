@@ -27,7 +27,7 @@ from .auto_stream_processor import (
 from .template import (
     cot_template,
     ToolCodeInfo,
-    COT,
+    PROMPT,
     build_tool_code_template,
     build_tool_code_prompt,
     gemini_template,
@@ -61,7 +61,7 @@ __all__ = [
     # template
     "cot_template",
     "ToolCodeInfo",
-    "COT",
+    "PROMPT",
     "build_tool_code_template",
     "build_tool_code_prompt",
     "gemini_template",

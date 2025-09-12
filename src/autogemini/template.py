@@ -8,7 +8,7 @@ from typing import Dict, List, Any, Tuple
 import json
 
 
-COT = r"""
+PROMPT = r"""
 <agent_block_header>system_alert</agent_block_header>
 
 # Since you are an Agent, you must think step by step before answering
@@ -236,7 +236,8 @@ def cot_template(
     """生成完整的COT模板"""
     template, _ = build_tool_code_prompt(tool_codes)
     return (
-        gemini_template(template, character_description, respond_tags_description) + COT
+        gemini_template(template, character_description, respond_tags_description)
+        + PROMPT
     )
 
 
