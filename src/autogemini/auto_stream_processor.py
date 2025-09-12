@@ -282,7 +282,7 @@ class AutoStreamProcessor:
                     self.history.append(
                         ChatMessage(
                             MessageRole.USER,
-                            f"<agent_block_header>system_alert</agent_block_header>\nTo FINISH the response, please include the `<agent_block_header>response</agent_block_header>` tag in your output. If you do not include this tag, the system will assume you have not finished your response and will continue processing.",
+                            f"<agent_block_header>system_alert</agent_block_header>\nNo `<agent_block_header>response</agent_block_header>` tag detected in the response. This response is invalid. Please ensure your final response includes the `<agent_block_header>response</agent_block_header>` tag and try again.",
                         )
                     )
                     if callback:

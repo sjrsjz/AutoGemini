@@ -16,7 +16,7 @@ import google.generativeai as genai
 from google.generativeai.types import GenerationConfig, HarmCategory, HarmBlockThreshold
 from google.api_core import exceptions as google_exceptions
 
-from .template import PROMPT
+from .template import BRIEF_PROMPT
 
 
 class MessageRole(Enum):
@@ -292,9 +292,6 @@ async def stream_chat(
     try:
         genai.configure(api_key=api_key)
 
-        # Combine user system prompt with the PROMPT template
-        full_system_prompt = PROMPT
-
         # Prepare generation config and safety settings
         generation_config = GenerationConfig(
             temperature=temperature,
@@ -313,7 +310,7 @@ async def stream_chat(
         # Instantiate the model with system prompt and configs
         generative_model = genai.GenerativeModel(
             model_name=model,
-            system_instruction=full_system_prompt,
+            system_instruction=BRIEF_PROMPT,
             generation_config=generation_config,
             safety_settings=safety_settings,
         )
