@@ -40,35 +40,19 @@ Since your **Agent** flow will iterate over multiple cycles, it is crucial to ma
 
 Each iteration (One Cycle) should start with the `<agent_block_header>think</agent_block_header>` header, where you outline your thoughts and plans for the iteration. This is followed by the necessary tool calls and their results, as well as your analysis and final thoughts before crafting the response.
 
-**Here is a **detailed agent flow diagram** of the process, which illustrates the flow of interaction:**
+**Here is a **detailed agent flow** of the process, which illustrates the flow of interaction:**
 
 ```agent flow
-@startuml
-title Agent Interaction Logic Flow
-
-start
-
-:<agent_block_header>think</agent_block_header>;
-
-if (Is a tool needed?) then (yes)
-    ' Flow A: With Tool Usage
-    repeat
-        :<agent_block_header>call_tool_code</agent_block_header>;
-        :<agent_block_header>system_feedback<|end_header>;
-        :<agent_block_header>subjective_thinking<|end_header>;
-    repeat while (Is more information needed?) is (yes)
-    -> no;
-
-else (no)
-    ' Flow B: Without Tool Usage
-endif
-
-:<agent_block_header>think</agent_block_header>;
-:<agent_block_header>response</agent_block_header>;
-
-stop
-
-@enduml
+let user_input = "User's question or request"
+let agent_think = agent_block("think", "Your thoughts and plan for this iteration")
+while (tool_needed) {
+    let tool_code = agent_block("call_tool_code", "The tool_code block with the necessary tool call")
+    let system_feedback = agent_block("system_feedback", "The system will insert the status and result of the tool call here")
+    let agent_think_after_tool = agent_block("think", "Your analysis and thoughts based on the tool result")
+}
+let final_think = agent_block("think", "Your final thoughts before crafting the response")
+let agent_response = agent_block("response", "The final, polished HTML snippet that answers the user's request")
+return agent_response
 ```
 
 ---
@@ -279,7 +263,7 @@ def parse_agent_output(text: str) -> List[ParsedBlock]:
     # - Group 1: block_type (e.g., "think", "response")
     # - Group 2: a lazy match for the content until the next block starts or end of string
     pattern = re.compile(
-        r"<\|start_header\|>([\w_]+)<\|end_header\|>(.*?)(?=<\|start_header\|>|$)",
+        r"<agent_block_header>([\w_]+)<\/agent_block_header>(.*?)(?=<agent_block_header>|$)",
         re.DOTALL,
     )
 
