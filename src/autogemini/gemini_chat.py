@@ -10,7 +10,7 @@ import os
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import List, Optional, Callable, Awaitable, Union
+from typing import Optional, Awaitable, Callable
 
 import google.generativeai as genai
 from google.generativeai.types import GenerationConfig, HarmCategory, HarmBlockThreshold
@@ -194,7 +194,7 @@ class ChatMessage:
 
     role: MessageRole
     content: str
-    media_files: List[MediaFile] = field(default_factory=list)
+    media_files: list[MediaFile] = field(default_factory=list)
 
     def add_media_file(
         self,
@@ -247,9 +247,9 @@ def _process_reasoning_content(text: str, model: str) -> str:
 async def stream_chat(
     api_key: str,
     callback: Callable[[str], Awaitable[None]],
-    history: Optional[List[ChatMessage]] = None,
+    history: Optional[list[ChatMessage]] = None,
     user_message: Optional[str] = None,
-    user_media_files: Optional[List[Union[str, MediaFile]]] = None,
+    user_media_files: Optional[list[str | MediaFile]] = None,
     model: str = "gemini-2.5-flash",  # Updated to a common, modern model
     system_prompt: Optional[str] = None,
     temperature: float = 1.0,
@@ -447,7 +447,7 @@ async def stream_chat(
         raise ValueError(f"Stream chat failed unexpectedly: {str(e)}") from e
 
 
-async def fetch_available_models(api_key: str) -> List[str]:
+async def fetch_available_models(api_key: str) -> list[str]:
     """Get list of available Gemini models using the official library."""
     try:
         genai.configure(api_key=api_key)
@@ -507,14 +507,14 @@ def _is_valid_gemini_model(model_id: str) -> bool:
 
 
 def create_multimodal_message(
-    content: str, media_files: Optional[List[Union[str, MediaFile]]] = None
+    content: str, media_files: Optional[list[str | MediaFile]] = None
 ) -> ChatMessage:
     """
     Create a ChatMessage with text and media files.
 
     Args:
         content: Text content of the message
-        media_files: List of file paths or MediaFile objects
+        media_files: list of file paths or MediaFile objects
 
     Returns:
         ChatMessage with text and media content

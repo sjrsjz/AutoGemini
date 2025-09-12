@@ -11,7 +11,6 @@ requires-python = ">=3.10"
 dependencies = [
     "build>=1.2.2.post1",
     "google-generativeai>=0.8.5",
-    # 兼容 pyppeteer、google-genai、autogemini 三者
     "websockets>=10.0,<11.0",
 ]
 authors = [{ name = "sjrsjz", email = "sjrsjz@gmail.com" }]

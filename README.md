@@ -56,11 +56,6 @@ processor = AutoStreamProcessor(api_key="YOUR_GEMINI_API_KEY")
 - `tests/`           —— 测试用例
 - `pyproject.toml`    —— 项目配置
 
-## 依赖
-
-- Python >= 3.10
-- aiohttp, httpx, requests, websockets
-
 ## 测试
 
 推荐使用 uv 运行测试：
