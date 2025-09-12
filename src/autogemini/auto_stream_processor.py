@@ -103,7 +103,7 @@ class AutoStreamProcessor:
             # 字符串消息：保持原有逻辑
             message_to_add = ChatMessage(
                 MessageRole.USER,
-                f"<|start_header|>user_message<|end_header|>{user_message}",
+                f"<agent_block_header>user_message</agent_block_header>{user_message}",
             )
         elif isinstance(user_message, ChatMessage):
             # ChatMessage对象：检查并调整格式
@@ -112,8 +112,12 @@ class AutoStreamProcessor:
 
             # 为ChatMessage添加header格式，保持与现有逻辑一致
             content = user_message.content
-            if not content.startswith("<|start_header|>user_message<|end_header|>"):
-                content = f"<|start_header|>user_message<|end_header|>{content}"
+            if not content.startswith(
+                "<agent_block_header>user_message</agent_block_header>"
+            ):
+                content = (
+                    f"<agent_block_header>user_message</agent_block_header>{content}"
+                )
 
             message_to_add = ChatMessage(
                 role=MessageRole.USER,
@@ -216,9 +220,9 @@ class AutoStreamProcessor:
                 final_response += f"```tool_code\n{toolcode_content}\n```\n"
 
                 async def handle_toolcode_result(result_text, is_error=False):
-                    fake_result = f"<|start_header|>system_feedback<|end_header|>\nTool Result:\n{result_text}"
+                    fake_result = f"<agent_block_header>system_feedback</agent_block_header>\nTool Result:\n{result_text}"
                     if cost >= max_cycle_cost:
-                        fake_result += "<|start_header|>system_feedback<|end_header|>\nYOU HAVE REACHED THE MAXIMUM ITERATION COST. OUTPUT YOUR FINAL RESPONSE NOW."
+                        fake_result += "<agent_block_header>system_feedback</agent_block_header>\nYOU HAVE REACHED THE MAXIMUM ITERATION COST. OUTPUT YOUR FINAL RESPONSE NOW."
                     self.history.append(
                         ChatMessage(
                             MessageRole.ASSISTANT,
@@ -232,7 +236,7 @@ class AutoStreamProcessor:
                     self.history.append(
                         ChatMessage(
                             MessageRole.USER,
-                            f"<|start_header|>system_alert<|end_header|>\ncontinue auto processing by using `<|start_header|>call_tool_code<|end_header|>`",
+                            f"<agent_block_header>system_alert</agent_block_header>\ncontinue auto processing by using `<agent_block_header>call_tool_code</agent_block_header>`",
                         )
                     )
                     nonlocal final_response
@@ -263,19 +267,22 @@ class AutoStreamProcessor:
             else:
                 # 没有ToolCode，处理完成
                 final_response += ai_output
-                # 检查是否存在 `<|start_header|>response<|end_header|>`标记，如果final_response中不存在回复的内容，则继续
-                if "<|start_header|>response<|end_header|>" not in final_response:
+                # 检查是否存在 `<agent_block_header>response</agent_block_header>`标记，如果final_response中不存在回复的内容，则继续
+                if (
+                    "<agent_block_header>response</agent_block_header>"
+                    not in final_response
+                ):
                     self.history.append(
                         ChatMessage(
                             MessageRole.ASSISTANT,
                             ai_output,
                         )
                     )
-                    # 模拟系统消息，提示AI必须输出`<|start_header|>response<|end_header|>`标记
+                    # 模拟系统消息，提示AI必须输出`<agent_block_header>response</agent_block_header>`标记
                     self.history.append(
                         ChatMessage(
                             MessageRole.USER,
-                            f"<|start_header|>system_alert<|end_header|>\nTo FINISH the response, please include the `<|start_header|>response<|end_header|>` tag in your output. If you do not include this tag, the system will assume you have not finished your response and will continue processing.",
+                            f"<agent_block_header>system_alert</agent_block_header>\nTo FINISH the response, please include the `<agent_block_header>response</agent_block_header>` tag in your output. If you do not include this tag, the system will assume you have not finished your response and will continue processing.",
                         )
                     )
                     if callback:
@@ -301,7 +308,7 @@ class AutoStreamProcessor:
         """
         # 步骤 1: 使用 rfind() 高效、安全地定位最后一个 call_tool_code 块的头部
         # 这避免了依赖一个可能尚未出现的终止标签。
-        call_block_header = "<|start_header|>call_tool_code<|end_header|>"
+        call_block_header = "<agent_block_header>call_tool_code</agent_block_header>"
         last_call_block_start_pos = text.rfind(call_block_header)
 
         # 如果没有找到任何 call_tool_code 块，直接返回
