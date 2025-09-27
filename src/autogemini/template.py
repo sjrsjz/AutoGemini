@@ -22,7 +22,7 @@ The valid output format looks like this:
 ```example
 <agent_block_header>think</agent_block_header>
 Your thoughts and plan for this iteration
-<agent_block_header>response</agent_block_header>
+<agent_block_header>send_response_to_user</agent_block_header>
 The final, polished HTML snippet that answers the user's request
 ```
 """
@@ -45,14 +45,14 @@ Your response must strictly follow the logical flows below, depending on whether
 *  `<agent_block_header>think</agent_block_header>`
    ... (Repeat steps 1-5 as needed)
 *  `<agent_block_header>think</agent_block_header>`
-*  `<agent_block_header>response</agent_block_header>`
+*  `<agent_block_header>send_response_to_user</agent_block_header>`
 
 > Chain: Think -> Call Tool -> Get Tool Code Result -> Check Cost of Iteration -> Think for Tool Code Result -> Finalize Response
 
 **Flow B: Without Tool Usage**
 ### Available headers:
 *  `<agent_block_header>think</agent_block_header>`
-*  `<agent_block_header>response</agent_block_header>`
+*  `<agent_block_header>send_response_to_user</agent_block_header>`
 
 > Chain: Think -> Finalize Response
 
@@ -82,7 +82,7 @@ All available headers:
   > Note: For **Math** problems, you should always include the relevant equations and variables in this block. Then, **solve the problem step-by-step(No matter how simple it seems)**.
 * **`<agent_block_header>call_tool_code</agent_block_header>`**: If a tool is needed, provide the `tool_code` block.
 * **`<agent_block_header>system_feedback</agent_block_header>`**: (System-generated) The system will insert the status and result of the tool call here. You do not write anything in this block.
-* **`<agent_block_header>response</agent_block_header>`**: Contains **only** the pure HTML snippet planned in your `think`.
+* **`<agent_block_header>send_response_to_user</agent_block_header>`**: Contains **only** the pure HTML snippet planned in your `think`.
 
 # **Key Rules & Formatting:**
 - The block order is mandatory and `think` is non-skippable.
@@ -119,7 +119,7 @@ Tool Result:
 <agent_block_header>think</agent_block_header>
 The tool call was successful and returned the current price and change for AAPL. I have all the factual data required. The user's request does not imply a complex layout, so I will provide a simple text answer.
 I will generate a simple HTML response consisting of two paragraphs (`<p>` tags). This approach is simple, direct, and follows the "default to simplicity" rule.
-<agent_block_header>response</agent_block_header>
+<agent_block_header>send_response_to_user</agent_block_header>
 <p>The latest stock price for Apple Inc. (AAPL) is <strong>$175.50 USD</strong>, with a daily change of -1.2%.</p>
 <p>Regarding whether it's a good time to buy, as an AI, I cannot provide financial advice. It's best to consult with a qualified financial advisor.</p>
 
@@ -133,7 +133,7 @@ I will generate a simple HTML response consisting of two paragraphs (`<p>` tags)
 <agent_block_header>think</agent_block_header>
 The user is asking a fundamental programming question. This is in my internal knowledge base, so no tools are needed. I will provide a simple, structured explanation.
 I will structure my answer using simple, standard HTML. I'll start with a summary in a `<p>` tag. Then, I will use an unordered list (`<ul>`) with list items (`<li>`) for the point-by-point comparison. I will use `<strong>` and `<code>` tags for emphasis and clarity. I will not use any unnecessary container `<div>`s or styling, as the request is for a straightforward explanation.
-<agent_block_header>response</agent_block_header>
+<agent_block_header>send_response_to_user</agent_block_header>
 <p>The main difference between a list and a tuple in Python is that lists are <strong>mutable</strong> (changeable) while tuples are <strong>immutable</strong> (unchangeable).</p>
 <p>Here's a more detailed breakdown:</p>
 <ul>

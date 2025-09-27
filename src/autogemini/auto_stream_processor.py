@@ -267,9 +267,9 @@ class AutoStreamProcessor:
             else:
                 # 没有ToolCode，处理完成
                 final_response += ai_output
-                # 检查是否存在 `<agent_block_header>response</agent_block_header>`标记，如果final_response中不存在回复的内容，则继续
+                # 检查是否存在 `<agent_block_header>send_response_to_user</agent_block_header>`标记，如果final_response中不存在回复的内容，则继续
                 if (
-                    "<agent_block_header>response</agent_block_header>"
+                    "<agent_block_header>send_response_to_user</agent_block_header>"
                     not in final_response
                 ):
                     self.history.append(
@@ -278,11 +278,11 @@ class AutoStreamProcessor:
                             ai_output,
                         )
                     )
-                    # 模拟系统消息，提示AI必须输出`<agent_block_header>response</agent_block_header>`标记
+                    # 模拟系统消息，提示AI必须输出`<agent_block_header>send_response_to_user</agent_block_header>`标记
                     self.history.append(
                         ChatMessage(
                             MessageRole.USER,
-                            f"<agent_block_header>system_alert</agent_block_header>\nNo `<agent_block_header>response</agent_block_header>` tag detected in the response. This response is invalid. Please ensure your final response includes the `<agent_block_header>response</agent_block_header>` tag and try again.",
+                            f"<agent_block_header>system_alert</agent_block_header>\nNo `<agent_block_header>send_response_to_user</agent_block_header>` tag detected in the response. This response is invalid. Please ensure your final response includes the `<agent_block_header>send_response_to_user</agent_block_header>` tag and try again.",
                         )
                     )
                     if callback:
