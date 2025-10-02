@@ -103,7 +103,7 @@ class AutoStreamProcessor:
             # 字符串消息：保持原有逻辑
             message_to_add = ChatMessage(
                 MessageRole.USER,
-                f"<agent_block_header>user_message</agent_block_header>{user_message}",
+                f"<!--user_message-->{user_message}",
             )
         elif isinstance(user_message, ChatMessage):
             # ChatMessage对象：检查并调整格式
@@ -112,12 +112,8 @@ class AutoStreamProcessor:
 
             # 为ChatMessage添加header格式，保持与现有逻辑一致
             content = user_message.content
-            if not content.startswith(
-                "<agent_block_header>user_message</agent_block_header>"
-            ):
-                content = (
-                    f"<agent_block_header>user_message</agent_block_header>{content}"
-                )
+            if not content.startswith("<!--user_message-->"):
+                content = f"<!--user_message-->{content}"
 
             message_to_add = ChatMessage(
                 role=MessageRole.USER,
@@ -220,9 +216,9 @@ class AutoStreamProcessor:
                 final_response += f"```tool_code\n{toolcode_content}\n```\n"
 
                 async def handle_toolcode_result(result_text, is_error=False):
-                    fake_result = f"<agent_block_header>system_feedback</agent_block_header>\nTool Result:\n{result_text}"
+                    fake_result = f"<!--system_feedback-->\nTool Result:\n{result_text}"
                     if cost >= max_cycle_cost:
-                        fake_result += "<agent_block_header>system_feedback</agent_block_header>\nYOU HAVE REACHED THE MAXIMUM ITERATION COST. OUTPUT YOUR FINAL RESPONSE NOW."
+                        fake_result += "<!--system_feedback-->\nYOU HAVE REACHED THE MAXIMUM ITERATION COST. OUTPUT YOUR FINAL RESPONSE NOW."
                     self.history.append(
                         ChatMessage(
                             MessageRole.ASSISTANT,
@@ -236,7 +232,7 @@ class AutoStreamProcessor:
                     self.history.append(
                         ChatMessage(
                             MessageRole.USER,
-                            f"<agent_block_header>system_alert</agent_block_header>\ncontinue auto processing by using `<agent_block_header>call_tool_code</agent_block_header>`",
+                            f"<!--system_alert-->\ncontinue auto processing by using `<!--call_tool_code-->`",
                         )
                     )
                     nonlocal final_response
@@ -267,22 +263,19 @@ class AutoStreamProcessor:
             else:
                 # 没有ToolCode，处理完成
                 final_response += ai_output
-                # 检查是否存在 `<agent_block_header>send_response_to_user</agent_block_header>`标记，如果final_response中不存在回复的内容，则继续
-                if (
-                    "<agent_block_header>send_response_to_user</agent_block_header>"
-                    not in final_response
-                ):
+                # 检查是否存在 `<!--send_response_to_user-->`标记，如果final_response中不存在回复的内容，则继续
+                if "<!--send_response_to_user-->" not in final_response:
                     self.history.append(
                         ChatMessage(
                             MessageRole.ASSISTANT,
                             ai_output,
                         )
                     )
-                    # 模拟系统消息，提示AI必须输出`<agent_block_header>send_response_to_user</agent_block_header>`标记
+                    # 模拟系统消息，提示AI必须输出`<!--send_response_to_user-->`标记
                     self.history.append(
                         ChatMessage(
                             MessageRole.USER,
-                            f"<agent_block_header>system_alert</agent_block_header>\nNo `<agent_block_header>send_response_to_user</agent_block_header>` tag detected in the response. This response is invalid. Please ensure your final response includes the `<agent_block_header>send_response_to_user</agent_block_header>` tag and try again.",
+                            f"<!--system_alert-->\nNo `<!--send_response_to_user-->` tag detected in the response. This response is invalid. Please ensure your final response includes the `<!--send_response_to_user-->` tag and try again.",
                         )
                     )
                     if callback:
@@ -308,7 +301,7 @@ class AutoStreamProcessor:
         """
         # 步骤 1: 使用 rfind() 高效、安全地定位最后一个 call_tool_code 块的头部
         # 这避免了依赖一个可能尚未出现的终止标签。
-        call_block_header = "<agent_block_header>call_tool_code</agent_block_header>"
+        call_block_header = "<!--call_tool_code-->"
         last_call_block_start_pos = text.rfind(call_block_header)
 
         # 如果没有找到任何 call_tool_code 块，直接返回
