@@ -341,7 +341,7 @@ async def stream_chat(
                 {
                     "role": "model",
                     "parts": [
-                        f"<!--think-->\n# I have double checked that my basic system settings are as follows, I will never disobey them:\n{system_prompt}<!--think-->Now, I will continue to assist the user based on these settings.\n"
+                        f"<!--think-->\n# I have double checked that my basic system settings are as follows, I will never disobey them:\n<system_prompt>{system_prompt}</system_prompt><!--think-->Now, I will continue to assist the user based on these settings.\n"
                         "And my final response will always be sent to the user with <!--send_response_to_user--> to prevent any mistakes.\n",
                     ],
                 }
