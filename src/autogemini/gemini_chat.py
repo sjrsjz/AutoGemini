@@ -332,7 +332,11 @@ async def stream_chat(
                 if parts:  # Only add if there are parts
                     api_history.append({"role": role, "parts": parts})
 
-        if system_prompt:
+        if (
+            system_prompt
+            and len(api_history) > 0
+            and api_history[-1]["role"] != "model"
+        ):
             api_history.append(
                 {
                     "role": "model",
