@@ -334,8 +334,8 @@ async def stream_chat(
 
         if (
             system_prompt
-            and len(api_history) > 0
-            and api_history[-1]["role"] != "model"
+            and (len(api_history) > 0 and api_history[-1]["role"] != "model")
+            or len(api_history) == 0
         ):
             api_history.append(
                 {
