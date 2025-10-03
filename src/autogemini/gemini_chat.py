@@ -332,19 +332,24 @@ async def stream_chat(
                 if parts:  # Only add if there are parts
                     api_history.append({"role": role, "parts": parts})
 
-        if (
-            system_prompt
-            and (len(api_history) > 0 and api_history[-1]["role"] != "model")
-            or len(api_history) == 0
-        ):
-            api_history.append(
+        if system_prompt:
+            api_history.insert(
+                0,
                 {
                     "role": "model",
                     "parts": [
                         f"<reactAgentSegmentHeader>think</reactAgentSegmentHeader>\n# I have double checked that my basic system settings are as follows, I will never disobey them:\n<system_prompt>{system_prompt}</system_prompt><reactAgentSegmentHeader>think</reactAgentSegmentHeader>Now, I will continue to assist the user based on these settings.\n"
                         "And my final response will always be sent to the user with <reactAgentSegmentHeader>send_response_to_user</reactAgentSegmentHeader> to prevent any mistakes.\n",
                     ],
-                }
+                },
+            )
+            api_history.append(
+                {
+                    "role": "model",
+                    "parts": [
+                        f"<reactAgentSegmentHeader>think</reactAgentSegmentHeader>\n# I have double checked that my basic system settings, my final response will always be sent to the user with <reactAgentSegmentHeader>send_response_to_user</reactAgentSegmentHeader> to prevent any mistakes.\n",
+                    ],
+                },
             )
 
         # Add the user's new message to the end of the history to be sent

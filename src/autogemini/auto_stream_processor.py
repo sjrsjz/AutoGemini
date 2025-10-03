@@ -234,7 +234,7 @@ class AutoStreamProcessor:
                     self.history.append(
                         ChatMessage(
                             MessageRole.USER,
-                            f"<reactAgentSegmentHeader>system_alert</reactAgentSegmentHeader>\ncontinue auto processing by using `<reactAgentSegmentHeader>call_tool_code</reactAgentSegmentHeader>`",
+                            f"<reactAgentSegmentHeader>system_feedback</reactAgentSegmentHeader>\ncontinue ReAct processing by using `<reactAgentSegmentHeader>think</reactAgentSegmentHeader>`",
                         )
                     )
                     nonlocal final_response
