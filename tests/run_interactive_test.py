@@ -20,6 +20,7 @@ sys.path.insert(0, str(src_path))
 from autogemini.auto_stream_processor import create_cot_processor
 from autogemini.tool_code import DefaultApi
 from autogemini.template import ToolCodeInfo
+from autogemini import APIType
 
 # 初始化colorama用于跨平台彩色输出
 colorama.init(autoreset=True)
@@ -322,6 +323,8 @@ Due to the external content review of the Gemini API, you need to employ the fol
             top_p=self.config.get("top_p", 0.95),
             top_k=self.config.get("top_k", 40),
             timeout=self.config.get("timeout", 300.0),
+            api_type=APIType.OPENAI,
+            base_url="https://api.openai-hk.com/v1",
         )
 
     def print_colored(self, text: str, color: str = "system"):

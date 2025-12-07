@@ -10,7 +10,19 @@ class CallbackMsgType(Enum):
     INFO = "info"  # 其它流程信息
 
 
-from .gemini_chat import stream_chat, StreamCancellation, ChatMessage, MessageRole
+# API类型枚举
+class APIType(Enum):
+    GEMINI = "gemini"  # Gemini 原生API
+    OPENAI = "openai"  # OpenAI 兼容API
+
+
+from .gemini_chat import (
+    stream_chat,
+    stream_chat_openai,
+    StreamCancellation,
+    ChatMessage,
+    MessageRole,
+)
 from .template import cot_template, ToolCodeInfo
 from .tool_code import DefaultApi, eval_tool_code
 import re
@@ -20,7 +32,8 @@ from typing import List, Optional, Callable, Tuple, Awaitable, Union
 
 class AutoStreamProcessor:
     """
-    自动流式处理器，处理AI流式输出中的ToolCode检测、执行和循环处理
+    自动流式处理器,处理AI流式输出中的ToolCode检测、执行和循环处理
+    支持 Gemini 原生 API 和 OpenAI 兼容 API
     """
 
     def __init__(
@@ -36,22 +49,28 @@ class AutoStreamProcessor:
         timeout: float = 300.0,
         api_delay: float = 0.0,
         max_output_size: int = 65536,
+        api_type: APIType = APIType.GEMINI,
+        base_url: str = "https://api.openai-hk.com/v1",
+        presence_penalty: float = 1.0,
     ):
         """
         初始化自动流式处理器
 
         Args:
-            api_key: Gemini API密钥
+            api_key: API密钥 (Gemini API密钥 或 OpenAI兼容API密钥,如 hk-xxxxxx)
             default_api: ToolCode执行API处理器
-            model: 使用的模型名称
+            model: 使用的模型名称 (Gemini默认: gemini-2.5-flash, OpenAI如: gpt-5, claude-4-5-sonnet等)
             system_prompt: 系统提示词
             temperature: 采样温度
             max_tokens: 最大token数
             top_p: Top-p采样参数
-            top_k: Top-k采样参数
+            top_k: Top-k采样参数 (仅Gemini使用)
             timeout: 请求超时时间
-            api_delay: API调用后的延迟时间(秒)，用于避免速率限制
+            api_delay: API调用后的延迟时间(秒),用于避免速率限制
             max_output_size: ToolCode执行时print输出的最大字节数限制
+            api_type: API类型, APIType.GEMINI 或 APIType.OPENAI
+            base_url: OpenAI兼容API的基础URL (仅当api_type=APIType.OPENAI时使用)
+            presence_penalty: 存在惩罚参数 (仅OpenAI使用)
         """
         self.api_key = api_key
         self.default_api = default_api
@@ -64,6 +83,9 @@ class AutoStreamProcessor:
         self.timeout = timeout
         self.api_delay = api_delay
         self.max_output_size = max_output_size
+        self.api_type = api_type
+        self.base_url = base_url
+        self.presence_penalty = presence_penalty
 
         # 对话历史
         self.history: List[ChatMessage] = []
@@ -184,21 +206,41 @@ class AutoStreamProcessor:
 
             # 基于当前历史请求AI
             try:
-                await stream_chat(
-                    api_key=self.api_key,
-                    callback=stream_callback,
-                    history=self.history.copy(),
-                    model=self.model,
-                    system_prompt=self.system_prompt,
-                    temperature=self.temperature,
-                    max_tokens=self.max_tokens,
-                    top_p=self.top_p,
-                    top_k=self.top_k,
-                    cancellation_token=cancellation_token,
-                    timeout=self.timeout,
-                )
+                if self.api_type == APIType.GEMINI:
+                    # 使用 Gemini 原生 API
+                    await stream_chat(
+                        api_key=self.api_key,
+                        callback=stream_callback,
+                        history=self.history.copy(),
+                        model=self.model,
+                        system_prompt=self.system_prompt,
+                        temperature=self.temperature,
+                        max_tokens=self.max_tokens,
+                        top_p=self.top_p,
+                        top_k=self.top_k,
+                        cancellation_token=cancellation_token,
+                        timeout=self.timeout,
+                    )
+                elif self.api_type == APIType.OPENAI:
+                    # 使用 OpenAI 兼容 API
+                    await stream_chat_openai(
+                        api_key=self.api_key,
+                        callback=stream_callback,
+                        history=self.history.copy(),
+                        model=self.model,
+                        system_prompt=self.system_prompt,
+                        temperature=self.temperature,
+                        max_tokens=self.max_tokens,
+                        top_p=self.top_p,
+                        presence_penalty=self.presence_penalty,
+                        base_url=self.base_url,
+                        cancellation_token=cancellation_token,
+                        timeout=self.timeout,
+                    )
+                else:
+                    raise ValueError(f"Unsupported api_type: {self.api_type}")
 
-                # 添加API调用后的延迟，避免速率限制
+                # 添加API调用后的延迟,避免速率限制
                 if self.api_delay > 0:
                     await asyncio.sleep(self.api_delay)
 

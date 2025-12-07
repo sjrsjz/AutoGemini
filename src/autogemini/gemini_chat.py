@@ -1,12 +1,14 @@
 """
 Gemini Chat streaming function using the official google-generativeai library.
 A single function for streaming chat with Gemini API.
+Also supports OpenAI-compatible API format for third-party relay services.
 """
 
 import asyncio
 import base64
 import mimetypes
 import os
+import json
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -455,65 +457,6 @@ async def stream_chat(
         raise ValueError(f"Stream chat failed unexpectedly: {str(e)}") from e
 
 
-async def fetch_available_models(api_key: str) -> list[str]:
-    """Get list of available Gemini models using the official library."""
-    try:
-        genai.configure(api_key=api_key)
-
-        models = []
-        for m in genai.list_models():
-            # We only want models that support content generation.
-            if "generateContent" in m.supported_generation_methods:
-                model_id = m.name
-
-                # The library returns names like 'models/gemini-pro'. Strip the prefix.
-                if model_id.startswith("models/"):
-                    cleaned_id = model_id[7:]
-                else:
-                    cleaned_id = model_id
-
-                if _is_valid_gemini_model(cleaned_id):
-                    models.append(cleaned_id)
-        return models
-    except (
-        google_exceptions.GoogleAPICallError,
-        google_exceptions.RetryError,
-        google_exceptions.Unauthenticated,
-    ) as e:
-        raise ValueError(f"Failed to fetch models: {str(e)}") from e
-
-
-def _is_valid_gemini_model(model_id: str) -> bool:
-    """Check if model meets our filtering criteria."""
-    import re
-
-    # Check if it matches gemini-[version]-* pattern
-    pattern = re.compile(r"^gemini-([1-9]|10)\.([0-9]|10)-")
-    if not pattern.match(model_id):
-        # Also allow models without version numbers like 'gemini-pro'
-        if not model_id.startswith("gemini-"):
-            return False
-
-    # Exclude models containing specific keywords (updated for multimodal support)
-    excluded_keywords = [
-        "embedding",
-        "tts",
-        "exp",
-        "native",
-        "dialog",
-        "live",
-        # Removed "vision", "audio", "image" to support multimodal models
-        # "thinking" is kept to allow reasoning models but filter their output
-    ]
-
-    model_lower = model_id.lower()
-    for keyword in excluded_keywords:
-        if keyword in model_lower:
-            return False
-
-    return True
-
-
 def create_multimodal_message(
     content: str, media_files: Optional[list[str | MediaFile]] = None
 ) -> ChatMessage:
@@ -541,23 +484,166 @@ def create_multimodal_message(
     return message
 
 
-def suggest_model_for_content(
-    has_images: bool = False, has_audio: bool = False, has_video: bool = False
+async def stream_chat_openai(
+    api_key: str,
+    callback: Callable[[str], Awaitable[None]],
+    history: Optional[list[ChatMessage]] = None,
+    user_message: Optional[str] = None,
+    model: str = "gemini-2.5-flash",
+    system_prompt: Optional[str] = None,
+    temperature: float = 0.8,
+    max_tokens: int = 8192,
+    top_p: float = 1.0,
+    presence_penalty: float = 1.0,
+    base_url: str = "https://api.openai-hk.com/v1",
+    cancellation_token: Optional[StreamCancellation] = None,
+    timeout: float = 300.0,
 ) -> str:
     """
-    Suggest an appropriate Gemini model based on the content type.
+    Send a message and get a streaming response using OpenAI-compatible API format.
+    This function is designed for third-party relay services like api.openai-hk.com.
 
     Args:
-        has_images: Whether the content includes images
-        has_audio: Whether the content includes audio
-        has_video: Whether the content includes video
+        api_key: API key (e.g., hk-xxxxxxxx for OpenAI-HK)
+        callback: Function to call with each chunk of response
+        history: Optional list of previous chat messages
+        user_message: Optional user's message to send
+        model: Model name (e.g., gemini-2.5-flash, gpt-5, ...)
+        system_prompt: Optional system prompt
+        temperature: Sampling temperature (0.0-2.0)
+        max_tokens: Maximum tokens to generate
+        top_p: Top-p sampling parameter
+        presence_penalty: Presence penalty parameter
+        base_url: Base URL for the API (default: https://api.openai-hk.com/v1)
+        cancellation_token: Optional token to cancel the stream
+        timeout: Request timeout in seconds
 
     Returns:
-        Suggested model name
+        Complete response text
+
+    Raises:
+        ValueError: If API request fails or no response generated
+        asyncio.CancelledError: If cancelled via cancellation_token or asyncio
     """
-    if has_images or has_video:
-        return "gemini-1.5-pro-vision-latest"  # Best for visual content
-    elif has_audio:
-        return "gemini-1.5-pro"  # Good for audio processing
-    else:
-        return "gemini-2.5-flash"  # Default for text-only
+    if not user_message and not history:
+        raise ValueError("Either history or user_message must be provided.")
+
+    try:
+        import aiohttp
+    except ImportError:
+        raise ImportError(
+            "aiohttp is required for OpenAI-compatible API. Install with: pip install aiohttp"
+        )
+
+    try:
+        # Build messages for OpenAI format
+        messages = []
+
+        # Add system prompt if provided
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+
+        # Add history
+        if history:
+            for message in history:
+                role = "user" if message.role == MessageRole.USER else "assistant"
+                content = message.content
+                messages.append({"role": role, "content": content})
+
+        # Add current user message
+        if user_message:
+            messages.append({"role": "user", "content": user_message})
+
+        if not messages:
+            raise ValueError("No messages to send.")
+
+        # Prepare request payload
+        payload = {
+            "model": model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "top_p": top_p,
+            "presence_penalty": presence_penalty,
+            "stream": True,
+        }
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+        }
+
+        url = f"{base_url.rstrip('/')}/chat/completions"
+
+        full_response_text = ""
+        has_received_data = False
+
+        # Create aiohttp session with timeout
+        timeout_config = aiohttp.ClientTimeout(total=timeout)
+
+        async with aiohttp.ClientSession(timeout=timeout_config) as session:
+            async with session.post(url, headers=headers, json=payload) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    raise ValueError(
+                        f"API request failed with status {response.status}: {error_text}"
+                    )
+
+                # Process SSE stream
+                async for line in response.content:
+                    if cancellation_token and cancellation_token.is_cancelled():
+                        break
+
+                    line_text = line.decode("utf-8").strip()
+
+                    if not line_text or line_text.startswith(":"):
+                        continue
+
+                    if line_text.startswith("data: "):
+                        data_str = line_text[6:]  # Remove "data: " prefix
+
+                        if data_str == "[DONE]":
+                            break
+
+                        try:
+                            data = json.loads(data_str)
+                            has_received_data = True
+
+                            # Extract content from delta
+                            if "choices" in data and len(data["choices"]) > 0:
+                                choice = data["choices"][0]
+                                if "delta" in choice and "content" in choice["delta"]:
+                                    content = choice["delta"]["content"]
+                                    if content:
+                                        await callback(content)
+                                        full_response_text += content
+
+                                # Check for finish reason
+                                if (
+                                    "finish_reason" in choice
+                                    and choice["finish_reason"]
+                                ):
+                                    break
+
+                        except json.JSONDecodeError:
+                            # Skip invalid JSON
+                            continue
+
+        if not full_response_text and not (
+            cancellation_token and cancellation_token.is_cancelled()
+        ):
+            if has_received_data:
+                raise ValueError(
+                    "Stream finished but generated no text. This could be due to content filters."
+                )
+            else:
+                raise ValueError("No data received from the stream.")
+
+        return full_response_text
+
+    except asyncio.CancelledError:
+        raise
+    except Exception as e:
+        if isinstance(e, ValueError):
+            raise
+        raise ValueError(f"OpenAI-compatible stream chat failed: {str(e)}") from e

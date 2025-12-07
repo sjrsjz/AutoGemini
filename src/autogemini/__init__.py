@@ -10,14 +10,14 @@ from .gemini_chat import (
     MediaFile,
     StreamCancellation,
     stream_chat,
-    fetch_available_models,
+    stream_chat_openai,
     create_multimodal_message,
-    suggest_model_for_content,
 )
 
 # auto_stream_processor
 from .auto_stream_processor import (
     CallbackMsgType,
+    APIType,
     AutoStreamProcessor,
     create_cot_processor,
     CLEAN_HTML_TAGS,
@@ -49,12 +49,16 @@ from .tool_code import (
 __all__ = [
     # gemini_chat
     "MessageRole",
+    "MediaType",
+    "MediaFile",
     "ChatMessage",
     "StreamCancellation",
     "stream_chat",
-    "fetch_available_models",
+    "stream_chat_openai",
+    "create_multimodal_message",
     # auto_stream_processor
     "CallbackMsgType",
+    "APIType",
     "AutoStreamProcessor",
     "create_cot_processor",
     "CLEAN_HTML_TAGS",
