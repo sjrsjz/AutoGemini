@@ -52,6 +52,7 @@ class AutoStreamProcessor:
         api_type: APIType = APIType.GEMINI,
         base_url: str = "https://api.openai-hk.com/v1",
         presence_penalty: float = 0.0,
+        enable_multimodal: bool = True,
     ):
         """
         初始化自动流式处理器
@@ -71,6 +72,7 @@ class AutoStreamProcessor:
             api_type: API类型, APIType.GEMINI 或 APIType.OPENAI
             base_url: OpenAI兼容API的基础URL (仅当api_type=APIType.OPENAI时使用)
             presence_penalty: 存在惩罚参数 (仅OpenAI使用)
+            enable_multimodal: 是否启用多模态输入 (仅OpenAI兼容API使用, Gemini原生API默认支持)
         """
         self.api_key = api_key
         self.default_api = default_api
@@ -86,6 +88,7 @@ class AutoStreamProcessor:
         self.api_type = api_type
         self.base_url = base_url
         self.presence_penalty = presence_penalty
+        self.enable_multimodal = enable_multimodal
 
         # 对话历史
         self.history: List[ChatMessage] = []
@@ -236,6 +239,7 @@ class AutoStreamProcessor:
                         base_url=self.base_url,
                         cancellation_token=cancellation_token,
                         timeout=self.timeout,
+                        enable_multimodal=self.enable_multimodal,
                     )
                 else:
                     raise ValueError(f"Unsupported api_type: {self.api_type}")

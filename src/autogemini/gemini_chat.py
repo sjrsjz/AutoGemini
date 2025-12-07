@@ -484,11 +484,35 @@ def create_multimodal_message(
     return message
 
 
+def _format_openai_content(
+    text: Optional[str], media_files: list[MediaFile]
+) -> str | list[dict]:
+    """Format content for OpenAI API, handling text and media."""
+    if not media_files:
+        return text or ""
+
+    content_parts = []
+    if text:
+        content_parts.append({"type": "text", "text": text})
+
+    for media_file in media_files:
+        _validate_media_file(media_file)
+
+        b64_data = base64.b64encode(media_file.data).decode("utf-8")
+        data_uri = f"data:{media_file.mime_type};base64,{b64_data}"
+
+        content_parts.append({"type": "image_url", "image_url": {"url": data_uri}})
+
+    return content_parts
+
+
 async def stream_chat_openai(
     api_key: str,
     callback: Callable[[str], Awaitable[None]],
     history: Optional[list[ChatMessage]] = None,
     user_message: Optional[str] = None,
+    user_media_files: Optional[list[str | MediaFile]] = None,
+    enable_multimodal: bool = True,
     model: str = "gemini-2.5-flash",
     system_prompt: Optional[str] = None,
     temperature: float = 0.8,
@@ -508,6 +532,8 @@ async def stream_chat_openai(
         callback: Function to call with each chunk of response
         history: Optional list of previous chat messages
         user_message: Optional user's message to send
+        user_media_files: Optional list of media files to include
+        enable_multimodal: Whether to include media files in the request
         model: Model name (e.g., gemini-2.5-flash, gpt-5, ...)
         system_prompt: Optional system prompt
         temperature: Sampling temperature (0.0-2.0)
@@ -525,8 +551,10 @@ async def stream_chat_openai(
         ValueError: If API request fails or no response generated
         asyncio.CancelledError: If cancelled via cancellation_token or asyncio
     """
-    if not user_message and not history:
-        raise ValueError("Either history or user_message must be provided.")
+    if not user_message and not history and not user_media_files:
+        raise ValueError(
+            "Either history, user_message, or user_media_files must be provided."
+        )
 
     try:
         import aiohttp
@@ -548,11 +576,29 @@ async def stream_chat_openai(
             for message in history:
                 role = "user" if message.role == MessageRole.USER else "assistant"
                 content = message.content
+
+                if enable_multimodal and message.media_files:
+                    content = _format_openai_content(content, message.media_files)
+
                 messages.append({"role": role, "content": content})
 
         # Add current user message
-        if user_message:
-            messages.append({"role": "user", "content": user_message})
+        current_media_files = []
+        if user_media_files:
+            for media_item in user_media_files:
+                if isinstance(media_item, str):
+                    current_media_files.append(MediaFile(file_path=media_item))
+                elif isinstance(media_item, MediaFile):
+                    current_media_files.append(media_item)
+                else:
+                    raise ValueError(f"Invalid media item type: {type(media_item)}")
+
+        if user_message or current_media_files:
+            content = user_message
+            if enable_multimodal and current_media_files:
+                content = _format_openai_content(user_message, current_media_files)
+
+            messages.append({"role": "user", "content": content})
 
         if not messages:
             raise ValueError("No messages to send.")

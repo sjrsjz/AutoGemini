@@ -178,7 +178,7 @@ wheels = [
 
 [[package]]
 name = "autogemini"
-version = "0.1.6.post2"
+version = "0.1.7"
 source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },
