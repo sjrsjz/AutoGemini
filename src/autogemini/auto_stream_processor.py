@@ -51,7 +51,7 @@ class AutoStreamProcessor:
         max_output_size: int = 65536,
         api_type: APIType = APIType.GEMINI,
         base_url: str = "https://api.openai-hk.com/v1",
-        presence_penalty: float = 1.0,
+        presence_penalty: float = 0.0,
     ):
         """
         初始化自动流式处理器
