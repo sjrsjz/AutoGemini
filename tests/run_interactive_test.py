@@ -440,9 +440,19 @@ Due to the external content review of the Gemini API, you need to employ the fol
             else:
                 self.force_print(str(chunk), "system")
 
+        async def raw_callback(data):
+            # 简单的示例：打印usage信息
+            if hasattr(data, "usage_metadata") and data.usage_metadata:
+                self.force_print(f"\n[Usage] {data.usage_metadata}\n", "system")
+            elif isinstance(data, dict) and "usage" in data:
+                self.force_print(f"\n[Usage] {data['usage']}\n", "system")
+
         try:
             response = await self.processor.process_conversation(
-                message, callback=stream_callback, tool_code_timeout=60.0
+                message,
+                callback=stream_callback,
+                tool_code_timeout=60.0,
+                raw_response_callback=raw_callback,
             )
             print("\n")  # 确保输出后换行
             # 流式输出完成后，显示最终完整回答

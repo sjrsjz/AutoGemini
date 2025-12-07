@@ -106,6 +106,7 @@ class AutoStreamProcessor:
         reset_history: bool = False,
         max_cycle_cost: int = 3,
         tool_code_timeout: float = 10.0,
+        raw_response_callback: Optional[Callable[[object], Awaitable[None]]] = None,
     ) -> str:
         """
         处理完整的对话，包括ToolCode检测和执行循环
@@ -116,6 +117,7 @@ class AutoStreamProcessor:
             reset_history: 是否重置对话历史
             max_cycle_cost: 最大循环次数
             tool_code_timeout: 工具代码超时时间
+            raw_response_callback: 原始响应回调函数
 
         Returns:
             完整的AI响应
@@ -161,7 +163,7 @@ class AutoStreamProcessor:
 
         # 开始处理循环 - 不再传递user_message
         final_response = await self._process_with_toolcode_loop(
-            callback, max_cycle_cost, tool_code_timeout
+            callback, max_cycle_cost, tool_code_timeout, raw_response_callback
         )
 
         # 最终响应就是累积的AI输出，不需要重复添加到历史
@@ -176,6 +178,7 @@ class AutoStreamProcessor:
         ] = None,
         max_cycle_cost: int = 3,
         tool_code_timeout: float = 10.0,
+        raw_response_callback: Optional[Callable[[object], Awaitable[None]]] = None,
     ) -> str:
         """
         处理带有ToolCode循环检测的流式输出
@@ -223,6 +226,7 @@ class AutoStreamProcessor:
                         top_k=self.top_k,
                         cancellation_token=cancellation_token,
                         timeout=self.timeout,
+                        raw_response_callback=raw_response_callback,
                     )
                 elif self.api_type == APIType.OPENAI:
                     # 使用 OpenAI 兼容 API
@@ -240,6 +244,7 @@ class AutoStreamProcessor:
                         cancellation_token=cancellation_token,
                         timeout=self.timeout,
                         enable_multimodal=self.enable_multimodal,
+                        raw_response_callback=raw_response_callback,
                     )
                 else:
                     raise ValueError(f"Unsupported api_type: {self.api_type}")

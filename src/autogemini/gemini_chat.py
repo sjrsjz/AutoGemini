@@ -260,6 +260,7 @@ async def stream_chat(
     top_k: int = 40,
     cancellation_token: Optional[StreamCancellation] = None,
     timeout: float = 300.0,
+    raw_response_callback: Optional[Callable[[object], Awaitable[None]]] = None,
 ) -> str:
     """
     Send a message and get a streaming response from the Gemini API using the official library.
@@ -278,6 +279,7 @@ async def stream_chat(
         top_k: Top-k sampling parameter
         cancellation_token: Optional token to cancel the stream
         timeout: Request timeout in seconds
+        raw_response_callback: Optional callback for raw response objects
 
     Returns:
         Complete response text
@@ -396,6 +398,9 @@ async def stream_chat(
 
         async for chunk in response:
             last_chunk = chunk  # **修正 1**: 在循环中更新最后一个响应块
+
+            if raw_response_callback:
+                await raw_response_callback(chunk)
 
             if cancellation_token and cancellation_token.is_cancelled():
                 break
@@ -522,6 +527,7 @@ async def stream_chat_openai(
     base_url: str = "https://api.openai-hk.com/v1",
     cancellation_token: Optional[StreamCancellation] = None,
     timeout: float = 300.0,
+    raw_response_callback: Optional[Callable[[dict], Awaitable[None]]] = None,
 ) -> str:
     """
     Send a message and get a streaming response using OpenAI-compatible API format.
@@ -543,6 +549,7 @@ async def stream_chat_openai(
         base_url: Base URL for the API (default: https://api.openai-hk.com/v1)
         cancellation_token: Optional token to cancel the stream
         timeout: Request timeout in seconds
+        raw_response_callback: Optional callback for raw response dicts
 
     Returns:
         Complete response text
@@ -653,6 +660,10 @@ async def stream_chat_openai(
 
                         try:
                             data = json.loads(data_str)
+
+                            if raw_response_callback:
+                                await raw_response_callback(data)
+
                             has_received_data = True
 
                             # Extract content from delta
