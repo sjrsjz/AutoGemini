@@ -681,17 +681,36 @@ async def stream_chat_openai(
                                             await callback(content)
                                             full_response_text += content
 
-                                    # Handle unexpected tool_calls by formatting them as tool_code blocks
+                                    # Handle tool_calls by formatting them as executable tool_code blocks
                                     if "tool_calls" in delta:
                                         tool_calls = delta["tool_calls"]
                                         for tool_call in tool_calls:
                                             if "function" in tool_call:
                                                 func = tool_call["function"]
                                                 func_name = func.get("name", "unknown")
-                                                func_args = func.get("arguments", "{}")
+                                                func_args_str = func.get(
+                                                    "arguments", "{}"
+                                                )
 
-                                                # Format as tool_code block
-                                                tool_code_block = f"\n```tool_code\n# Unexpected tool call from model:\n# Function: {func_name}\n# Arguments: {func_args}\nprint('Tool call intercepted:', '{func_name}', {func_args})\n```\n"
+                                                # Parse arguments JSON to generate proper function call
+                                                try:
+                                                    args_dict = (
+                                                        json.loads(func_args_str)
+                                                        if func_args_str
+                                                        else {}
+                                                    )
+                                                    # Generate keyword arguments string
+                                                    kwargs_parts = [
+                                                        f"{k}={json.dumps(v)}"
+                                                        for k, v in args_dict.items()
+                                                    ]
+                                                    kwargs_str = ", ".join(kwargs_parts)
+
+                                                    # Format as executable tool_code block (directly print default_api call)
+                                                    tool_code_block = f"\n```tool_code\nprint(default_api.{func_name}({kwargs_str}))\n```\n"
+                                                except json.JSONDecodeError:
+                                                    # Fallback if arguments parsing fails
+                                                    tool_code_block = f"\n```tool_code\n# Failed to parse arguments for {func_name}\n# Raw arguments: {func_args_str}\nprint('Error: Invalid tool call arguments')\n```\n"
 
                                                 await callback(tool_code_block)
                                                 full_response_text += tool_code_block
@@ -700,10 +719,27 @@ async def stream_chat_openai(
                                     if "function_call" in delta:
                                         func_call = delta["function_call"]
                                         func_name = func_call.get("name", "unknown")
-                                        func_args = func_call.get("arguments", "{}")
+                                        func_args_str = func_call.get("arguments", "{}")
 
-                                        # Format as tool_code block
-                                        tool_code_block = f"\n```tool_code\n# Unexpected function call from model:\n# Function: {func_name}\n# Arguments: {func_args}\nprint('Function call intercepted:', '{func_name}', {func_args})\n```\n"
+                                        # Parse arguments JSON to generate proper function call
+                                        try:
+                                            args_dict = (
+                                                json.loads(func_args_str)
+                                                if func_args_str
+                                                else {}
+                                            )
+                                            # Generate keyword arguments string
+                                            kwargs_parts = [
+                                                f"{k}={json.dumps(v)}"
+                                                for k, v in args_dict.items()
+                                            ]
+                                            kwargs_str = ", ".join(kwargs_parts)
+
+                                            # Format as executable tool_code block (directly print default_api call)
+                                            tool_code_block = f"\n```tool_code\nprint(default_api.{func_name}({kwargs_str}))\n```\n"
+                                        except json.JSONDecodeError:
+                                            # Fallback if arguments parsing fails
+                                            tool_code_block = f"\n```tool_code\n# Failed to parse arguments for {func_name}\n# Raw arguments: {func_args_str}\nprint('Error: Invalid function call arguments')\n```\n"
 
                                         await callback(tool_code_block)
                                         full_response_text += tool_code_block
