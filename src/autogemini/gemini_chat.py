@@ -619,6 +619,8 @@ async def stream_chat_openai(
             "top_p": top_p,
             "presence_penalty": presence_penalty,
             "stream": True,
+            # Explicitly disable tool use to prevent hallucinations/unexpected tool calls
+            "tool_choice": "none",
         }
 
         headers = {
@@ -669,11 +671,42 @@ async def stream_chat_openai(
                             # Extract content from delta
                             if "choices" in data and len(data["choices"]) > 0:
                                 choice = data["choices"][0]
-                                if "delta" in choice and "content" in choice["delta"]:
-                                    content = choice["delta"]["content"]
-                                    if content:
-                                        await callback(content)
-                                        full_response_text += content
+                                if "delta" in choice:
+                                    delta = choice["delta"]
+
+                                    # Handle content
+                                    if "content" in delta:
+                                        content = delta["content"]
+                                        if content:
+                                            await callback(content)
+                                            full_response_text += content
+
+                                    # Handle unexpected tool_calls by formatting them as tool_code blocks
+                                    if "tool_calls" in delta:
+                                        tool_calls = delta["tool_calls"]
+                                        for tool_call in tool_calls:
+                                            if "function" in tool_call:
+                                                func = tool_call["function"]
+                                                func_name = func.get("name", "unknown")
+                                                func_args = func.get("arguments", "{}")
+
+                                                # Format as tool_code block
+                                                tool_code_block = f"\n```tool_code\n# Unexpected tool call from model:\n# Function: {func_name}\n# Arguments: {func_args}\nprint('Tool call intercepted:', '{func_name}', {func_args})\n```\n"
+
+                                                await callback(tool_code_block)
+                                                full_response_text += tool_code_block
+
+                                    # Handle legacy function_call format
+                                    if "function_call" in delta:
+                                        func_call = delta["function_call"]
+                                        func_name = func_call.get("name", "unknown")
+                                        func_args = func_call.get("arguments", "{}")
+
+                                        # Format as tool_code block
+                                        tool_code_block = f"\n```tool_code\n# Unexpected function call from model:\n# Function: {func_name}\n# Arguments: {func_args}\nprint('Function call intercepted:', '{func_name}', {func_args})\n```\n"
+
+                                        await callback(tool_code_block)
+                                        full_response_text += tool_code_block
 
                                 # Check for finish reason
                                 if (
