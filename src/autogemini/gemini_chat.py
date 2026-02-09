@@ -619,8 +619,6 @@ async def stream_chat_openai(
             "top_p": top_p,
             "presence_penalty": presence_penalty,
             "stream": True,
-            # Explicitly disable tool use to prevent hallucinations/unexpected tool calls
-            "tool_choice": "none",
         }
 
         headers = {
